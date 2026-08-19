@@ -1,570 +1,246 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  />
+<title>HILDA Spreadsheet</title>
 
-  <title>HILDA Spreadsheet</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
-  <!-- Required libraries -->
-  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/rxjs@7.8.1/dist/bundles/rxjs.umd.min.js"></script>
-  <script src="https://unpkg.com/echarts@5.6.0/dist/echarts.min.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/rxjs@7.8.1/dist/bundles/rxjs.umd.min.js"></script>
+<script src="https://unpkg.com/echarts@5.6.0/dist/echarts.min.js"></script>
 
-  <!-- Univer -->
-  <script src="https://unpkg.com/@univerjs/presets@0.25.0/lib/umd/index.js"></script>
+<script src="https://unpkg.com/@univerjs/presets@0.25.0/lib/umd/index.js"></script>
+<script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/index.js"></script>
+<script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/locales/en-US.js"></script>
 
-  <script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/index.js"></script>
+<link rel="stylesheet"
+href="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/index.css">
 
-  <script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/locales/en-US.js"></script>
-
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/index.css"
-  />
-
-  <style>
-    html,
-    body,
-    #app {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: white;
-    }
-
-    #error {
-      display: none;
-      font-family: Arial, sans-serif;
-      padding: 20px;
-      font-size: 16px;
-    }
-  </style>
+<style>
+html,body,#app{
+    width:100%;
+    height:100%;
+    margin:0;
+    overflow:hidden;
+}
+#status{
+    position:fixed;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:white;
+    font-family:Arial;
+    z-index:9999;
+}
+</style>
 </head>
 
 <body>
 
 <div id="app"></div>
-<div id="error"></div>
+<div id="status">Loading spreadsheet...</div>
 
 <script>
-(function () {
+(async function(){
 
-    /*
-     * --------------------------------------
-     * 1. Read participant ID + sheet ID
-     * --------------------------------------
-     */
+const p = new URLSearchParams(location.search);
+const pid = p.get("pid");
+const sheetID = p.get("sheet");
 
-    const params = new URLSearchParams(window.location.search);
+if(!pid || !sheetID){
+    document.getElementById("status").textContent =
+        "Missing participant ID or sheet ID.";
+    return;
+}
 
-    const participantID = params.get("pid");
-    const sheetID = params.get("sheet");
+const KEY = "HILDA_" + pid + "_" + sheetID;
+const FILE = "./data/" + sheetID + ".xlsx";
 
+/* ---------- IndexedDB ---------- */
 
-    /*
-     * Stop if participant ID or sheet ID
-     * was not supplied by Qualtrics.
-     */
+function db(){
+    return new Promise((resolve,reject)=>{
+        const r = indexedDB.open("HILDA_DB",1);
 
-    if (!participantID || !sheetID) {
+        r.onupgradeneeded = e=>{
+            const d=e.target.result;
+            if(!d.objectStoreNames.contains("workbooks"))
+                d.createObjectStore("workbooks");
+        };
 
-        document.getElementById("app").style.display = "none";
+        r.onsuccess=()=>resolve(r.result);
+        r.onerror=()=>reject(r.error);
+    });
+}
 
-        const error = document.getElementById("error");
+async function getSaved(){
+    const d=await db();
 
-        error.style.display = "block";
+    return new Promise(resolve=>{
+        const r=d.transaction("workbooks")
+                 .objectStore("workbooks")
+                 .get(KEY);
 
-        if (!participantID && !sheetID) {
-            error.textContent =
-                "Missing participant ID and sheet ID.";
-        } else if (!participantID) {
-            error.textContent =
-                "Missing participant ID.";
-        } else {
-            error.textContent =
-                "Missing sheet ID.";
-        }
+        r.onsuccess=()=>resolve(r.result || null);
+        r.onerror=()=>resolve(null);
+    });
+}
 
-        return;
-    }
+async function save(snapshot){
+    const d=await db();
 
-
-    /*
-     * --------------------------------------
-     * 2. Independent storage
-     * --------------------------------------
-     */
-
-    const STORAGE_KEY =
-        "HILDA_UNIVER_SHEET_" +
-        participantID +
-        "_" +
-        sheetID;
+    const tx=d.transaction("workbooks","readwrite");
+    tx.objectStore("workbooks").put(snapshot,KEY);
+}
 
 
-    /*
-     * ======================================
-     * 3. INITIAL DATA FOR THE 7 SHEETS
-     * ======================================
-     *
-     * Replace the sample data below with
-     * your actual data.
-     *
-     * Each inner [...] is ONE ROW.
-     *
-     * Example:
-     *
-     * [
-     *   ["ID", "Income", "Age"],
-     *   [1, 50000, 25],
-     *   [2, 60000, 30]
-     * ]
-     *
-     * Formulas can also be included:
-     *
-     * ["Total", "=SUM(B2:B10)"]
-     *
-     */
+/* ---------- Start Univer ---------- */
 
-    const DEFAULT_DATA = {
+const {createUniver}=UniverPresets;
+const {LocaleType,mergeLocales}=UniverCore;
+const {UniverSheetsCorePreset}=UniverPresetSheetsCore;
+
+const {univerAPI}=createUniver({
+    locale:LocaleType.EN_US,
+
+    locales:{
+        [LocaleType.EN_US]:
+        mergeLocales(UniverPresetSheetsCoreEnUS)
+    },
+
+    presets:[
+        UniverSheetsCorePreset({
+            container:"app"
+        })
+    ]
+});
 
 
-        /*
-         * ----------------------------------
-         * Standalone spreadsheet
-         * ----------------------------------
-         */
+/* ---------- Convert XLSX ---------- */
 
-        standalone: [
+function convertSheet(ws,name,index){
 
-            ["Column A", "Column B", "Column C"],
-            [1, 10, 100],
-            [2, 20, 200],
-            [3, 30, 300]
+    const cellData={};
+    let rows=1000;
+    let cols=26;
 
-        ],
+    Object.keys(ws).forEach(addr=>{
 
+        if(addr[0]==="!") return;
 
-        /*
-         * ----------------------------------
-         * Task 1
-         * ----------------------------------
-         */
+        const c=ws[addr];
+        const pos=XLSX.utils.decode_cell(addr);
 
-        task1: [
+        rows=Math.max(rows,pos.r+1);
+        cols=Math.max(cols,pos.c+1);
 
-            ["A", "B"],
-            [1, 6],
-            [2, 7],
-            [3, 8],
-            [4, 8],
-            [5, 10]
+        if(!cellData[pos.r])
+            cellData[pos.r]={};
 
-        ],
+        const cell={};
 
+        if(c.f)
+            cell.f=c.f.startsWith("=") ? c.f : "="+c.f;
 
-        /*
-         * ----------------------------------
-         * Task 2
-         * ----------------------------------
-         */
+        if(c.v!==undefined)
+            cell.v=c.v;
 
-        task2: [
+        cellData[pos.r][pos.c]=cell;
+    });
 
-            ["Column A", "Column B"],
-            [10, 20],
-            [30, 40],
-            [50, 60]
-
-        ],
-
-
-        /*
-         * ----------------------------------
-         * Task 3
-         * ----------------------------------
-         */
-
-        task3: [
-
-            ["Column A", "Column B"],
-            [100, 200],
-            [300, 400],
-            [500, 600]
-
-        ],
-
-
-        /*
-         * ----------------------------------
-         * Task 4
-         * ----------------------------------
-         */
-
-        task4: [
-
-            ["Column A", "Column B"],
-            [5, 15],
-            [25, 35],
-            [45, 55]
-
-        ],
-
-
-        /*
-         * ----------------------------------
-         * Task 5
-         * ----------------------------------
-         */
-
-        task5: [
-
-            ["Column A", "Column B"],
-            [2, 4],
-            [6, 8],
-            [10, 12]
-
-        ],
-
-
-        /*
-         * ----------------------------------
-         * Task 6
-         * ----------------------------------
-         */
-
-        task6: [
-
-            ["Column A", "Column B"],
-            [11, 22],
-            [33, 44],
-            [55, 66]
-
-        ]
-
+    return {
+        id:"sheet_"+index,
+        name:name,
+        rowCount:rows,
+        columnCount:cols,
+        cellData:cellData
     };
+}
 
 
-    /*
-     * --------------------------------------
-     * 4. Start Univer
-     * --------------------------------------
-     */
+async function loadTemplate(){
 
-    const { createUniver } = UniverPresets;
+    const response=await fetch(FILE,{cache:"no-store"});
 
-    const {
-        LocaleType,
-        mergeLocales
-    } = UniverCore;
+    if(!response.ok)
+        throw new Error("Cannot load "+FILE);
 
-    const {
-        UniverSheetsCorePreset
-    } = UniverPresetSheetsCore;
+    const buffer=await response.arrayBuffer();
+    const xlsx=XLSX.read(buffer,{cellFormula:true});
+
+    const sheets={};
+    const sheetOrder=[];
+
+    xlsx.SheetNames.forEach((name,i)=>{
+
+        const s=convertSheet(
+            xlsx.Sheets[name],
+            name,
+            i
+        );
+
+        sheets[s.id]=s;
+        sheetOrder.push(s.id);
+    });
+
+    return {
+        id:"HILDA_"+pid+"_"+sheetID,
+        name:"HILDA Spreadsheet",
+        locale:LocaleType.EN_US,
+        styles:{},
+        sheetOrder:sheetOrder,
+        sheets:sheets
+    };
+}
 
 
-    const { univerAPI } = createUniver({
+/* ---------- Load participant workbook ---------- */
 
-        locale: LocaleType.EN_US,
+try{
 
-        locales: {
-            [LocaleType.EN_US]:
-                mergeLocales(
-                    UniverPresetSheetsCoreEnUS
-                )
-        },
+    const saved=await getSaved();
+    const snapshot=saved || await loadTemplate();
 
-        presets: [
-            UniverSheetsCorePreset({
-                container: "app"
-            })
-        ]
+    const workbook=
+        univerAPI.createWorkbook(snapshot);
+
+    document.getElementById("status").style.display="none";
+
+
+    /* ---------- Autosave ---------- */
+
+    let timer;
+
+    univerAPI.onCommandExecuted(function(){
+
+        clearTimeout(timer);
+
+        timer=setTimeout(function(){
+            save(workbook.save());
+        },500);
 
     });
 
+    document.addEventListener("visibilitychange",function(){
 
-    /*
-     * --------------------------------------
-     * 5. Load participant's saved sheet
-     * --------------------------------------
-     */
+        if(document.visibilityState==="hidden")
+            save(workbook.save());
 
-    let savedWorkbook = null;
+    });
 
-    try {
+}catch(e){
 
-        const saved =
-            localStorage.getItem(STORAGE_KEY);
+    console.error(e);
 
-        if (saved) {
-            savedWorkbook = JSON.parse(saved);
-        }
+    document.getElementById("status").textContent =
+        "Spreadsheet could not be loaded.";
 
-    } catch (e) {
-
-        console.error(
-            "Could not load saved spreadsheet:",
-            e
-        );
-
-    }
-
-
-    /*
-     * --------------------------------------
-     * 6. Create workbook
-     * --------------------------------------
-     */
-
-    let workbook;
-
-    if (savedWorkbook) {
-
-        /*
-         * This participant has already
-         * edited this particular sheet.
-         *
-         * Restore their own saved version.
-         */
-
-        workbook =
-            univerAPI.createWorkbook(
-                savedWorkbook
-            );
-
-    } else {
-
-        /*
-         * First time this participant
-         * opens this particular sheet.
-         */
-
-        workbook =
-            univerAPI.createWorkbook({
-                name: "Participant Spreadsheet"
-            });
-
-
-        /*
-         * Get initial data corresponding
-         * to standalone / task1 / ... task6
-         */
-
-        const initialData =
-            DEFAULT_DATA[sheetID];
-
-
-        if (
-            initialData &&
-            initialData.length > 0
-        ) {
-
-            const worksheet =
-                workbook.getActiveSheet();
-
-
-            /*
-             * Number of rows
-             */
-
-            const rowCount =
-                initialData.length;
-
-
-            /*
-             * Find widest row
-             */
-
-            const columnCount =
-                Math.max.apply(
-                    null,
-                    initialData.map(function (row) {
-                        return row.length;
-                    })
-                );
-
-
-            /*
-             * Make every row same width.
-             */
-
-            const rectangularData =
-                initialData.map(function (row) {
-
-                    const copy =
-                        row.slice();
-
-                    while (
-                        copy.length <
-                        columnCount
-                    ) {
-                        copy.push("");
-                    }
-
-                    return copy;
-                });
-
-
-            /*
-             * Convert:
-             *
-             * 1  -> A
-             * 2  -> B
-             * 26 -> Z
-             * 27 -> AA
-             */
-
-            function columnLetter(number) {
-
-                var result = "";
-
-                while (number > 0) {
-
-                    var remainder =
-                        (number - 1) % 26;
-
-                    result =
-                        String.fromCharCode(
-                            65 + remainder
-                        ) +
-                        result;
-
-                    number =
-                        Math.floor(
-                            (number - 1) / 26
-                        );
-                }
-
-                return result;
-            }
-
-
-            const endColumn =
-                columnLetter(
-                    columnCount
-                );
-
-
-            /*
-             * Example:
-             *
-             * 5 rows, 3 columns
-             * becomes:
-             *
-             * A1:C5
-             */
-
-            const rangeAddress =
-                "A1:" +
-                endColumn +
-                rowCount;
-
-
-            /*
-             * Insert initial dataset
-             */
-
-            worksheet
-                .getRange(rangeAddress)
-                .setValues(
-                    rectangularData
-                );
-
-        }
-
-    }
-
-
-    /*
-     * --------------------------------------
-     * 7. Autosave
-     * --------------------------------------
-     */
-
-    let saveTimer = null;
-
-    function saveSpreadsheet() {
-
-        clearTimeout(saveTimer);
-
-        saveTimer = setTimeout(function () {
-
-            try {
-
-                const snapshot =
-                    workbook.save();
-
-                localStorage.setItem(
-                    STORAGE_KEY,
-                    JSON.stringify(snapshot)
-                );
-
-            } catch (e) {
-
-                console.error(
-                    "Could not save spreadsheet:",
-                    e
-                );
-
-            }
-
-        }, 300);
-
-    }
-
-
-    /*
-     * Save whenever Univer executes
-     * an editing / formatting command.
-     */
-
-    univerAPI.onCommandExecuted(
-        function () {
-
-            saveSpreadsheet();
-
-        }
-    );
-
-
-    /*
-     * Save one final time when page closes
-     * or Qualtrics moves to next page.
-     */
-
-    window.addEventListener(
-        "beforeunload",
-        function () {
-
-            try {
-
-                const snapshot =
-                    workbook.save();
-
-                localStorage.setItem(
-                    STORAGE_KEY,
-                    JSON.stringify(snapshot)
-                );
-
-            } catch (e) {
-
-                console.error(
-                    "Final spreadsheet save failed:",
-                    e
-                );
-
-            }
-
-        }
-    );
+}
 
 })();
 </script>
