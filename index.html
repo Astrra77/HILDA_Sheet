@@ -1,201 +1,235 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
 
-  <title>Experiment Spreadsheet</title>
+  <title>HILDA Spreadsheet</title>
 
-  <!-- Handsontable -->
+  <!-- Required libraries -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/rxjs@7.8.1/dist/bundles/rxjs.umd.min.js"></script>
+  <script src="https://unpkg.com/echarts@5.6.0/dist/echarts.min.js"></script>
+
+  <!-- Univer -->
+  <script src="https://unpkg.com/@univerjs/presets@0.25.0/lib/umd/index.js"></script>
+
+  <script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/index.js"></script>
+
+  <script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/locales/en-US.js"></script>
+
   <link
     rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/handsontable@17.0/styles/handsontable.min.css"
-  >
-
-  <link
-    rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/handsontable@17.0/styles/ht-theme-main.min.css"
-  >
+    href="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/index.css"
+  />
 
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
+    html,
+    body,
+    #app {
       width: 100%;
       height: 100%;
+      margin: 0;
+      padding: 0;
       overflow: hidden;
       background: white;
     }
 
-    #spreadsheet {
-      width: 100%;
-      height: 100vh;
+    #error {
+      display: none;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      font-size: 16px;
     }
   </style>
 </head>
 
 <body>
 
-<div id="spreadsheet"></div>
-
-<!-- Formula engine -->
-<script src="https://cdn.jsdelivr.net/npm/hyperformula@3.4.0/dist/hyperformula.full.min.js"></script>
-
-<!-- Spreadsheet -->
-<script src="https://cdn.jsdelivr.net/npm/handsontable@17.0/dist/handsontable.full.min.js"></script>
+<div id="app"></div>
+<div id="error"></div>
 
 <script>
 (function () {
 
-    // --------------------------------------
-    // 1. Get participant ID from Qualtrics
-    // --------------------------------------
+  /* ---------------------------------------
+     Participant ID
+  --------------------------------------- */
 
-    const params = new URLSearchParams(window.location.search);
-    const participantID = params.get("pid");
+  const params = new URLSearchParams(window.location.search);
+  const participantID = params.get("pid");
 
-    if (!participantID) {
-        document.body.innerHTML =
-            "<p style='font-family:Arial;padding:20px;'>Missing participant ID.</p>";
-        return;
+  if (!participantID) {
+    document.getElementById("app").style.display = "none";
+
+    const error = document.getElementById("error");
+    error.style.display = "block";
+    error.textContent = "Missing participant ID.";
+
+    return;
+  }
+
+
+  /* ---------------------------------------
+     Separate storage for each participant
+  --------------------------------------- */
+
+  const STORAGE_KEY =
+    "HILDA_UNIVER_SHEET_" + participantID;
+
+
+  /* ---------------------------------------
+     Start Univer
+  --------------------------------------- */
+
+  const { createUniver } = UniverPresets;
+
+  const {
+    LocaleType,
+    mergeLocales
+  } = UniverCore;
+
+  const {
+    UniverSheetsCorePreset
+  } = UniverPresetSheetsCore;
+
+
+  const { univerAPI } = createUniver({
+
+    locale: LocaleType.EN_US,
+
+    locales: {
+      [LocaleType.EN_US]:
+        mergeLocales(
+          UniverPresetSheetsCoreEnUS
+        )
+    },
+
+    presets: [
+      UniverSheetsCorePreset({
+        container: "app"
+      })
+    ]
+
+  });
+
+
+  /* ---------------------------------------
+     Load participant's previous spreadsheet
+     or create a completely blank one
+  --------------------------------------- */
+
+  let savedWorkbook = null;
+
+  try {
+
+    const saved =
+      localStorage.getItem(STORAGE_KEY);
+
+    if (saved) {
+      savedWorkbook = JSON.parse(saved);
     }
 
+  } catch (e) {
+    console.error(
+      "Could not load saved spreadsheet:",
+      e
+    );
+  }
 
-    // --------------------------------------
-    // 2. Each participant gets separate data
-    // --------------------------------------
 
-    const STORAGE_KEY = "HILDA_SHEET_" + participantID;
+  let workbook;
 
-    const ROWS = 100;
-    const COLS = 26;
+  if (savedWorkbook) {
 
-    function createBlankSheet() {
-        return Array.from(
-            { length: ROWS },
-            () => Array(COLS).fill(null)
+    workbook =
+      univerAPI.createWorkbook(
+        savedWorkbook
+      );
+
+  } else {
+
+    workbook =
+      univerAPI.createWorkbook({
+        name: "Participant Spreadsheet"
+      });
+
+  }
+
+
+  /* ---------------------------------------
+     Autosave
+  --------------------------------------- */
+
+  let saveTimer = null;
+
+  function saveSpreadsheet() {
+
+    clearTimeout(saveTimer);
+
+    saveTimer = setTimeout(function () {
+
+      try {
+
+        const snapshot =
+          workbook.save();
+
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(snapshot)
         );
+
+      } catch (e) {
+
+        console.error(
+          "Could not save spreadsheet:",
+          e
+        );
+
+      }
+
+    }, 300);
+
+  }
+
+
+  /*
+    Save after spreadsheet commands.
+
+    This catches cell edits, formulas,
+    formatting, percentage formatting,
+    row/column operations, etc.
+  */
+
+  workbook.onCommandExecuted(function () {
+    saveSpreadsheet();
+  });
+
+
+  /* Save once more before leaving */
+
+  window.addEventListener(
+    "beforeunload",
+    function () {
+
+      try {
+
+        const snapshot =
+          workbook.save();
+
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(snapshot)
+        );
+
+      } catch (e) {}
+
     }
-
-    let data = createBlankSheet();
-
-    try {
-
-        const saved = sessionStorage.getItem(STORAGE_KEY);
-
-        if (saved) {
-            data = JSON.parse(saved);
-        }
-
-    } catch (e) {
-
-        document.body.innerHTML =
-            "<p style='font-family:Arial;padding:20px;'>Browser storage is unavailable.</p>";
-
-        return;
-    }
-
-
-    // --------------------------------------
-    // 3. Formula engine
-    // --------------------------------------
-
-    const formulaEngine = HyperFormula.buildEmpty({
-        licenseKey: "internal-use-in-handsontable"
-    });
-
-
-    // --------------------------------------
-    // 4. Create spreadsheet
-    // --------------------------------------
-
-    const container = document.getElementById("spreadsheet");
-
-    const hot = new Handsontable(container, {
-
-        data: data,
-
-        rowHeaders: true,
-        colHeaders: true,
-
-        width: "100%",
-        height: window.innerHeight,
-
-        minRows: ROWS,
-        minCols: COLS,
-
-        colWidths: 90,
-        rowHeights: 24,
-
-        manualColumnResize: true,
-        manualRowResize: true,
-
-        copyPaste: true,
-        fillHandle: true,
-
-        undo: true,
-
-        formulas: {
-            engine: formulaEngine
-        },
-
-        contextMenu: [
-            "cut",
-            "copy",
-            "---------",
-            "undo",
-            "redo",
-            "---------",
-            "alignment"
-        ],
-
-        licenseKey: "non-commercial-and-evaluation",
-
-
-        // --------------------------------------
-        // 5. Automatically save every edit
-        // --------------------------------------
-
-        afterChange: function (changes, source) {
-
-            if (!changes || source === "loadData") {
-                return;
-            }
-
-            changes.forEach(function (change) {
-
-                const row = change[0];
-                const column = change[1];
-                const newValue = change[3];
-
-                if (typeof column === "number") {
-
-                    if (!data[row]) {
-                        data[row] = Array(COLS).fill(null);
-                    }
-
-                    data[row][column] = newValue;
-                }
-
-            });
-
-            sessionStorage.setItem(
-                STORAGE_KEY,
-                JSON.stringify(data)
-            );
-        }
-
-    });
-
-
-    // Resize with browser
-    window.addEventListener("resize", function () {
-
-        hot.updateSettings({
-            height: window.innerHeight
-        });
-
-    });
+  );
 
 })();
 </script>
