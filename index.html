@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Experiment Spreadsheet</title>
+
+  <!-- Handsontable -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/handsontable@17.0/styles/handsontable.min.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/handsontable@17.0/styles/ht-theme-main.min.css"
+  >
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: white;
+    }
+
+    #spreadsheet {
+      width: 100%;
+      height: 100vh;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="spreadsheet"></div>
+
+<!-- Formula engine -->
+<script src="https://cdn.jsdelivr.net/npm/hyperformula@3.4.0/dist/hyperformula.full.min.js"></script>
+
+<!-- Spreadsheet -->
+<script src="https://cdn.jsdelivr.net/npm/handsontable@17.0/dist/handsontable.full.min.js"></script>
+
+<script>
+(function () {
+
+    // --------------------------------------
+    // 1. Get participant ID from Qualtrics
+    // --------------------------------------
+
+    const params = new URLSearchParams(window.location.search);
+    const participantID = params.get("pid");
+
+    if (!participantID) {
+        document.body.innerHTML =
+            "<p style='font-family:Arial;padding:20px;'>Missing participant ID.</p>";
+        return;
+    }
+
+
+    // --------------------------------------
+    // 2. Each participant gets separate data
+    // --------------------------------------
+
+    const STORAGE_KEY = "HILDA_SHEET_" + participantID;
+
+    const ROWS = 100;
+    const COLS = 26;
+
+    function createBlankSheet() {
+        return Array.from(
+            { length: ROWS },
+            () => Array(COLS).fill(null)
+        );
+    }
+
+    let data = createBlankSheet();
+
+    try {
+
+        const saved = sessionStorage.getItem(STORAGE_KEY);
+
+        if (saved) {
+            data = JSON.parse(saved);
+        }
+
+    } catch (e) {
+
+        document.body.innerHTML =
+            "<p style='font-family:Arial;padding:20px;'>Browser storage is unavailable.</p>";
+
+        return;
+    }
+
+
+    // --------------------------------------
+    // 3. Formula engine
+    // --------------------------------------
+
+    const formulaEngine = HyperFormula.buildEmpty({
+        licenseKey: "internal-use-in-handsontable"
+    });
+
+
+    // --------------------------------------
+    // 4. Create spreadsheet
+    // --------------------------------------
+
+    const container = document.getElementById("spreadsheet");
+
+    const hot = new Handsontable(container, {
+
+        data: data,
+
+        rowHeaders: true,
+        colHeaders: true,
+
+        width: "100%",
+        height: window.innerHeight,
+
+        minRows: ROWS,
+        minCols: COLS,
+
+        colWidths: 90,
+        rowHeights: 24,
+
+        manualColumnResize: true,
+        manualRowResize: true,
+
+        copyPaste: true,
+        fillHandle: true,
+
+        undo: true,
+
+        formulas: {
+            engine: formulaEngine
+        },
+
+        contextMenu: [
+            "cut",
+            "copy",
+            "---------",
+            "undo",
+            "redo",
+            "---------",
+            "alignment"
+        ],
+
+        licenseKey: "non-commercial-and-evaluation",
+
+
+        // --------------------------------------
+        // 5. Automatically save every edit
+        // --------------------------------------
+
+        afterChange: function (changes, source) {
+
+            if (!changes || source === "loadData") {
+                return;
+            }
+
+            changes.forEach(function (change) {
+
+                const row = change[0];
+                const column = change[1];
+                const newValue = change[3];
+
+                if (typeof column === "number") {
+
+                    if (!data[row]) {
+                        data[row] = Array(COLS).fill(null);
+                    }
+
+                    data[row][column] = newValue;
+                }
+
+            });
+
+            sessionStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify(data)
+            );
+        }
+
+    });
+
+
+    // Resize with browser
+    window.addEventListener("resize", function () {
+
+        hot.updateSettings({
+            height: window.innerHeight
+        });
+
+    });
+
+})();
+</script>
+
+</body>
+</html>
