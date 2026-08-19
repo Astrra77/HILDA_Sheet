@@ -101,18 +101,6 @@
      * --------------------------------------
      * 2. Independent storage
      * --------------------------------------
-     *
-     * Example:
-     *
-     * Participant ABC + task1
-     * HILDA_UNIVER_SHEET_ABC_task1
-     *
-     * Participant ABC + task2
-     * HILDA_UNIVER_SHEET_ABC_task2
-     *
-     * Participant XYZ + task1
-     * HILDA_UNIVER_SHEET_XYZ_task1
-     *
      */
 
     const STORAGE_KEY =
@@ -123,8 +111,151 @@
 
 
     /*
+     * ======================================
+     * 3. INITIAL DATA FOR THE 7 SHEETS
+     * ======================================
+     *
+     * Replace the sample data below with
+     * your actual data.
+     *
+     * Each inner [...] is ONE ROW.
+     *
+     * Example:
+     *
+     * [
+     *   ["ID", "Income", "Age"],
+     *   [1, 50000, 25],
+     *   [2, 60000, 30]
+     * ]
+     *
+     * Formulas can also be included:
+     *
+     * ["Total", "=SUM(B2:B10)"]
+     *
+     */
+
+    const DEFAULT_DATA = {
+
+
+        /*
+         * ----------------------------------
+         * Standalone spreadsheet
+         * ----------------------------------
+         */
+
+        standalone: [
+
+            ["Column A", "Column B", "Column C"],
+            [1, 10, 100],
+            [2, 20, 200],
+            [3, 30, 300]
+
+        ],
+
+
+        /*
+         * ----------------------------------
+         * Task 1
+         * ----------------------------------
+         */
+
+        task1: [
+
+            ["A", "B"],
+            [1, 6],
+            [2, 7],
+            [3, 8],
+            [4, 8],
+            [5, 10]
+
+        ],
+
+
+        /*
+         * ----------------------------------
+         * Task 2
+         * ----------------------------------
+         */
+
+        task2: [
+
+            ["Column A", "Column B"],
+            [10, 20],
+            [30, 40],
+            [50, 60]
+
+        ],
+
+
+        /*
+         * ----------------------------------
+         * Task 3
+         * ----------------------------------
+         */
+
+        task3: [
+
+            ["Column A", "Column B"],
+            [100, 200],
+            [300, 400],
+            [500, 600]
+
+        ],
+
+
+        /*
+         * ----------------------------------
+         * Task 4
+         * ----------------------------------
+         */
+
+        task4: [
+
+            ["Column A", "Column B"],
+            [5, 15],
+            [25, 35],
+            [45, 55]
+
+        ],
+
+
+        /*
+         * ----------------------------------
+         * Task 5
+         * ----------------------------------
+         */
+
+        task5: [
+
+            ["Column A", "Column B"],
+            [2, 4],
+            [6, 8],
+            [10, 12]
+
+        ],
+
+
+        /*
+         * ----------------------------------
+         * Task 6
+         * ----------------------------------
+         */
+
+        task6: [
+
+            ["Column A", "Column B"],
+            [11, 22],
+            [33, 44],
+            [55, 66]
+
+        ]
+
+    };
+
+
+    /*
      * --------------------------------------
-     * 3. Start Univer
+     * 4. Start Univer
      * --------------------------------------
      */
 
@@ -162,8 +293,7 @@
 
     /*
      * --------------------------------------
-     * 4. Load this participant's
-     *    spreadsheet for this page
+     * 5. Load participant's saved sheet
      * --------------------------------------
      */
 
@@ -190,13 +320,20 @@
 
     /*
      * --------------------------------------
-     * 5. Create workbook
+     * 6. Create workbook
      * --------------------------------------
      */
 
     let workbook;
 
     if (savedWorkbook) {
+
+        /*
+         * This participant has already
+         * edited this particular sheet.
+         *
+         * Restore their own saved version.
+         */
 
         workbook =
             univerAPI.createWorkbook(
@@ -205,17 +342,150 @@
 
     } else {
 
+        /*
+         * First time this participant
+         * opens this particular sheet.
+         */
+
         workbook =
             univerAPI.createWorkbook({
                 name: "Participant Spreadsheet"
             });
+
+
+        /*
+         * Get initial data corresponding
+         * to standalone / task1 / ... task6
+         */
+
+        const initialData =
+            DEFAULT_DATA[sheetID];
+
+
+        if (
+            initialData &&
+            initialData.length > 0
+        ) {
+
+            const worksheet =
+                workbook.getActiveSheet();
+
+
+            /*
+             * Number of rows
+             */
+
+            const rowCount =
+                initialData.length;
+
+
+            /*
+             * Find widest row
+             */
+
+            const columnCount =
+                Math.max.apply(
+                    null,
+                    initialData.map(function (row) {
+                        return row.length;
+                    })
+                );
+
+
+            /*
+             * Make every row same width.
+             */
+
+            const rectangularData =
+                initialData.map(function (row) {
+
+                    const copy =
+                        row.slice();
+
+                    while (
+                        copy.length <
+                        columnCount
+                    ) {
+                        copy.push("");
+                    }
+
+                    return copy;
+                });
+
+
+            /*
+             * Convert:
+             *
+             * 1  -> A
+             * 2  -> B
+             * 26 -> Z
+             * 27 -> AA
+             */
+
+            function columnLetter(number) {
+
+                var result = "";
+
+                while (number > 0) {
+
+                    var remainder =
+                        (number - 1) % 26;
+
+                    result =
+                        String.fromCharCode(
+                            65 + remainder
+                        ) +
+                        result;
+
+                    number =
+                        Math.floor(
+                            (number - 1) / 26
+                        );
+                }
+
+                return result;
+            }
+
+
+            const endColumn =
+                columnLetter(
+                    columnCount
+                );
+
+
+            /*
+             * Example:
+             *
+             * 5 rows, 3 columns
+             * becomes:
+             *
+             * A1:C5
+             */
+
+            const rangeAddress =
+                "A1:" +
+                endColumn +
+                rowCount;
+
+
+            /*
+             * Insert initial dataset
+             */
+
+            worksheet
+                .getRange(rangeAddress)
+                .setValues(
+                    rectangularData
+                );
+
+        }
 
     }
 
 
     /*
      * --------------------------------------
-     * 6. Autosave
+     * 7. Autosave
      * --------------------------------------
      */
 
@@ -253,14 +523,16 @@
 
     /*
      * Save whenever Univer executes
-     * an editing/formatting command.
+     * an editing / formatting command.
      */
 
-    univerAPI.onCommandExecuted(function () {
+    univerAPI.onCommandExecuted(
+        function () {
 
-        saveSpreadsheet();
+            saveSpreadsheet();
 
-    });
+        }
+    );
 
 
     /*
