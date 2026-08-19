@@ -17,25 +17,32 @@
 <script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/index.js"></script>
 <script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/locales/en-US.js"></script>
 
-<link rel="stylesheet"
-href="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/index.css">
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/index.css"
+>
 
 <style>
-html,body,#app{
-    width:100%;
-    height:100%;
-    margin:0;
-    overflow:hidden;
+html,
+body,
+#app {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: white;
 }
-#status{
-    position:fixed;
-    inset:0;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    background:white;
-    font-family:Arial;
-    z-index:9999;
+
+#status {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+    z-index: 9999;
 }
 </style>
 </head>
@@ -46,201 +53,565 @@ html,body,#app{
 <div id="status">Loading spreadsheet...</div>
 
 <script>
-(async function(){
+(async function () {
 
-const p = new URLSearchParams(location.search);
-const pid = p.get("pid");
-const sheetID = p.get("sheet");
+    const params =
+        new URLSearchParams(window.location.search);
 
-if(!pid || !sheetID){
-    document.getElementById("status").textContent =
-        "Missing participant ID or sheet ID.";
-    return;
-}
+    const pid =
+        params.get("pid");
 
-const KEY = "HILDA_" + pid + "_" + sheetID;
-const FILE = "./data/" + sheetID + ".xlsx";
-
-/* ---------- IndexedDB ---------- */
-
-function db(){
-    return new Promise((resolve,reject)=>{
-        const r = indexedDB.open("HILDA_DB",1);
-
-        r.onupgradeneeded = e=>{
-            const d=e.target.result;
-            if(!d.objectStoreNames.contains("workbooks"))
-                d.createObjectStore("workbooks");
-        };
-
-        r.onsuccess=()=>resolve(r.result);
-        r.onerror=()=>reject(r.error);
-    });
-}
-
-async function getSaved(){
-    const d=await db();
-
-    return new Promise(resolve=>{
-        const r=d.transaction("workbooks")
-                 .objectStore("workbooks")
-                 .get(KEY);
-
-        r.onsuccess=()=>resolve(r.result || null);
-        r.onerror=()=>resolve(null);
-    });
-}
-
-async function save(snapshot){
-    const d=await db();
-
-    const tx=d.transaction("workbooks","readwrite");
-    tx.objectStore("workbooks").put(snapshot,KEY);
-}
+    const sheetID =
+        params.get("sheet");
 
 
-/* ---------- Start Univer ---------- */
+    if (!pid || !sheetID) {
 
-const {createUniver}=UniverPresets;
-const {LocaleType,mergeLocales}=UniverCore;
-const {UniverSheetsCorePreset}=UniverPresetSheetsCore;
+        document.getElementById("status").textContent =
+            "Missing participant ID or sheet ID.";
 
-const {univerAPI}=createUniver({
-    locale:LocaleType.EN_US,
-
-    locales:{
-        [LocaleType.EN_US]:
-        mergeLocales(UniverPresetSheetsCoreEnUS)
-    },
-
-    presets:[
-        UniverSheetsCorePreset({
-            container:"app"
-        })
-    ]
-});
+        return;
+    }
 
 
-/* ---------- Convert XLSX ---------- */
+    /*
+     * Each participant + task
+     * gets separate saved data.
+     */
 
-function convertSheet(ws,name,index){
-
-    const cellData={};
-    let rows=1000;
-    let cols=26;
-
-    Object.keys(ws).forEach(addr=>{
-
-        if(addr[0]==="!") return;
-
-        const c=ws[addr];
-        const pos=XLSX.utils.decode_cell(addr);
-
-        rows=Math.max(rows,pos.r+1);
-        cols=Math.max(cols,pos.c+1);
-
-        if(!cellData[pos.r])
-            cellData[pos.r]={};
-
-        const cell={};
-
-        if(c.f)
-            cell.f=c.f.startsWith("=") ? c.f : "="+c.f;
-
-        if(c.v!==undefined)
-            cell.v=c.v;
-
-        cellData[pos.r][pos.c]=cell;
-    });
-
-    return {
-        id:"sheet_"+index,
-        name:name,
-        rowCount:rows,
-        columnCount:cols,
-        cellData:cellData
-    };
-}
+    const KEY =
+        "HILDA_" +
+        pid +
+        "_" +
+        sheetID;
 
 
-async function loadTemplate(){
+    /*
+     * Excel files are stored in
+     * the SAME GitHub folder as index.html.
+     *
+     * standalone → ./standalone.xlsx
+     * task1      → ./task1.xlsx
+     * etc.
+     */
 
-    const response=await fetch(FILE,{cache:"no-store"});
+    const FILE =
+        "./" +
+        sheetID +
+        ".xlsx";
 
-    if(!response.ok)
-        throw new Error("Cannot load "+FILE);
 
-    const buffer=await response.arrayBuffer();
-    const xlsx=XLSX.read(buffer,{cellFormula:true});
+    /*
+     * -----------------------------
+     * IndexedDB
+     * -----------------------------
+     */
 
-    const sheets={};
-    const sheetOrder=[];
+    function openDB() {
 
-    xlsx.SheetNames.forEach((name,i)=>{
+        return new Promise(
+            function (resolve, reject) {
 
-        const s=convertSheet(
-            xlsx.Sheets[name],
-            name,
-            i
+                const request =
+                    indexedDB.open(
+                        "HILDA_DB",
+                        1
+                    );
+
+                request.onupgradeneeded =
+                    function (event) {
+
+                        const db =
+                            event.target.result;
+
+                        if (
+                            !db.objectStoreNames.contains(
+                                "workbooks"
+                            )
+                        ) {
+
+                            db.createObjectStore(
+                                "workbooks"
+                            );
+
+                        }
+
+                    };
+
+                request.onsuccess =
+                    function () {
+
+                        resolve(
+                            request.result
+                        );
+
+                    };
+
+                request.onerror =
+                    function () {
+
+                        reject(
+                            request.error
+                        );
+
+                    };
+
+            }
         );
 
-        sheets[s.id]=s;
-        sheetOrder.push(s.id);
+    }
+
+
+    async function getSaved() {
+
+        const db =
+            await openDB();
+
+        return new Promise(
+            function (resolve) {
+
+                const request =
+                    db
+                    .transaction(
+                        "workbooks"
+                    )
+                    .objectStore(
+                        "workbooks"
+                    )
+                    .get(KEY);
+
+                request.onsuccess =
+                    function () {
+
+                        resolve(
+                            request.result ||
+                            null
+                        );
+
+                    };
+
+                request.onerror =
+                    function () {
+
+                        resolve(null);
+
+                    };
+
+            }
+        );
+
+    }
+
+
+    async function saveWorkbook(snapshot) {
+
+        const db =
+            await openDB();
+
+        const transaction =
+            db.transaction(
+                "workbooks",
+                "readwrite"
+            );
+
+        transaction
+            .objectStore(
+                "workbooks"
+            )
+            .put(
+                snapshot,
+                KEY
+            );
+
+    }
+
+
+    /*
+     * -----------------------------
+     * Start Univer
+     * -----------------------------
+     */
+
+    const {
+        createUniver
+    } = UniverPresets;
+
+
+    const {
+        LocaleType,
+        mergeLocales
+    } = UniverCore;
+
+
+    const {
+        UniverSheetsCorePreset
+    } = UniverPresetSheetsCore;
+
+
+    const {
+        univerAPI
+    } = createUniver({
+
+        locale:
+            LocaleType.EN_US,
+
+        locales: {
+
+            [LocaleType.EN_US]:
+
+                mergeLocales(
+                    UniverPresetSheetsCoreEnUS
+                )
+
+        },
+
+        presets: [
+
+            UniverSheetsCorePreset({
+                container: "app"
+            })
+
+        ]
+
     });
 
-    return {
-        id:"HILDA_"+pid+"_"+sheetID,
-        name:"HILDA Spreadsheet",
-        locale:LocaleType.EN_US,
-        styles:{},
-        sheetOrder:sheetOrder,
-        sheets:sheets
-    };
-}
+
+    /*
+     * -----------------------------
+     * Convert Excel worksheet
+     * -----------------------------
+     */
+
+    function convertSheet(
+        worksheet,
+        name,
+        index
+    ) {
+
+        const cellData = {};
+
+        let rows = 1000;
+        let columns = 26;
 
 
-/* ---------- Load participant workbook ---------- */
+        Object.keys(
+            worksheet
+        ).forEach(
+            function (address) {
 
-try{
-
-    const saved=await getSaved();
-    const snapshot=saved || await loadTemplate();
-
-    const workbook=
-        univerAPI.createWorkbook(snapshot);
-
-    document.getElementById("status").style.display="none";
+                if (
+                    address.charAt(0) === "!"
+                ) {
+                    return;
+                }
 
 
-    /* ---------- Autosave ---------- */
+                const excelCell =
+                    worksheet[address];
 
-    let timer;
 
-    univerAPI.onCommandExecuted(function(){
+                const position =
+                    XLSX.utils.decode_cell(
+                        address
+                    );
 
-        clearTimeout(timer);
 
-        timer=setTimeout(function(){
-            save(workbook.save());
-        },500);
+                rows =
+                    Math.max(
+                        rows,
+                        position.r + 1
+                    );
 
-    });
 
-    document.addEventListener("visibilitychange",function(){
+                columns =
+                    Math.max(
+                        columns,
+                        position.c + 1
+                    );
 
-        if(document.visibilityState==="hidden")
-            save(workbook.save());
 
-    });
+                if (
+                    !cellData[position.r]
+                ) {
 
-}catch(e){
+                    cellData[position.r] = {};
 
-    console.error(e);
+                }
 
-    document.getElementById("status").textContent =
-        "Spreadsheet could not be loaded.";
 
-}
+                const cell = {};
+
+
+                /*
+                 * Preserve formulas
+                 */
+
+                if (excelCell.f) {
+
+                    cell.f =
+                        excelCell.f.startsWith("=")
+                            ? excelCell.f
+                            : "=" + excelCell.f;
+
+                }
+
+
+                /*
+                 * Preserve values
+                 */
+
+                if (
+                    excelCell.v !== undefined
+                ) {
+
+                    cell.v =
+                        excelCell.v;
+
+                }
+
+
+                cellData[position.r][position.c] =
+                    cell;
+
+            }
+        );
+
+
+        return {
+
+            id:
+                "sheet_" +
+                index,
+
+            name:
+                name,
+
+            rowCount:
+                rows,
+
+            columnCount:
+                columns,
+
+            cellData:
+                cellData
+
+        };
+
+    }
+
+
+    /*
+     * -----------------------------
+     * Load XLSX template
+     * -----------------------------
+     */
+
+    async function loadTemplate() {
+
+        const response =
+            await fetch(
+                FILE,
+                {
+                    cache: "no-store"
+                }
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                "Cannot load " +
+                FILE
+            );
+
+        }
+
+
+        const buffer =
+            await response.arrayBuffer();
+
+
+        const excelWorkbook =
+            XLSX.read(
+                buffer,
+                {
+                    cellFormula: true
+                }
+            );
+
+
+        const sheets = {};
+        const sheetOrder = [];
+
+
+        excelWorkbook
+            .SheetNames
+            .forEach(
+                function (
+                    name,
+                    index
+                ) {
+
+                    const converted =
+                        convertSheet(
+                            excelWorkbook.Sheets[name],
+                            name,
+                            index
+                        );
+
+
+                    sheets[
+                        converted.id
+                    ] =
+                        converted;
+
+
+                    sheetOrder.push(
+                        converted.id
+                    );
+
+                }
+            );
+
+
+        return {
+
+            id:
+                "HILDA_" +
+                pid +
+                "_" +
+                sheetID,
+
+            name:
+                "HILDA Spreadsheet",
+
+            locale:
+                LocaleType.EN_US,
+
+            styles:
+                {},
+
+            sheetOrder:
+                sheetOrder,
+
+            sheets:
+                sheets
+
+        };
+
+    }
+
+
+    /*
+     * -----------------------------
+     * Load saved participant copy
+     * OR original XLSX
+     * -----------------------------
+     */
+
+    try {
+
+        const saved =
+            await getSaved();
+
+
+        const snapshot =
+            saved ||
+            await loadTemplate();
+
+
+        const workbook =
+            univerAPI.createWorkbook(
+                snapshot
+            );
+
+
+        document
+            .getElementById(
+                "status"
+            )
+            .style.display =
+                "none";
+
+
+        /*
+         * -------------------------
+         * Autosave
+         * -------------------------
+         */
+
+        let saveTimer;
+
+
+        univerAPI.onCommandExecuted(
+            function () {
+
+                clearTimeout(
+                    saveTimer
+                );
+
+
+                saveTimer =
+                    setTimeout(
+                        function () {
+
+                            saveWorkbook(
+                                workbook.save()
+                            );
+
+                        },
+                        500
+                    );
+
+            }
+        );
+
+
+        document.addEventListener(
+            "visibilitychange",
+            function () {
+
+                if (
+                    document.visibilityState ===
+                    "hidden"
+                ) {
+
+                    saveWorkbook(
+                        workbook.save()
+                    );
+
+                }
+
+            }
+        );
+
+
+        window.addEventListener(
+            "pagehide",
+            function () {
+
+                saveWorkbook(
+                    workbook.save()
+                );
+
+            }
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            error
+        );
+
+
+        document.getElementById(
+            "status"
+        ).textContent =
+            "Spreadsheet could not be loaded: " +
+            error.message;
+
+    }
 
 })();
 </script>
