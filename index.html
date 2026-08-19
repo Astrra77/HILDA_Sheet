@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8" />
+
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0"
@@ -56,180 +57,242 @@
 <script>
 (function () {
 
-  /* ---------------------------------------
-     Participant ID
-  --------------------------------------- */
+    /*
+     * --------------------------------------
+     * 1. Read participant ID + sheet ID
+     * --------------------------------------
+     */
 
-  const params = new URLSearchParams(window.location.search);
-  const participantID = params.get("pid");
+    const params = new URLSearchParams(window.location.search);
 
-  if (!participantID) {
-    document.getElementById("app").style.display = "none";
-
-    const error = document.getElementById("error");
-    error.style.display = "block";
-    error.textContent = "Missing participant ID.";
-
-    return;
-  }
+    const participantID = params.get("pid");
+    const sheetID = params.get("sheet");
 
 
-  /* ---------------------------------------
-     Separate storage for each participant
-  --------------------------------------- */
+    /*
+     * Stop if participant ID or sheet ID
+     * was not supplied by Qualtrics.
+     */
 
-  const STORAGE_KEY =
-    "HILDA_UNIVER_SHEET_" + participantID;
+    if (!participantID || !sheetID) {
 
+        document.getElementById("app").style.display = "none";
 
-  /* ---------------------------------------
-     Start Univer
-  --------------------------------------- */
+        const error = document.getElementById("error");
 
-  const { createUniver } = UniverPresets;
+        error.style.display = "block";
 
-  const {
-    LocaleType,
-    mergeLocales
-  } = UniverCore;
+        if (!participantID && !sheetID) {
+            error.textContent =
+                "Missing participant ID and sheet ID.";
+        } else if (!participantID) {
+            error.textContent =
+                "Missing participant ID.";
+        } else {
+            error.textContent =
+                "Missing sheet ID.";
+        }
 
-  const {
-    UniverSheetsCorePreset
-  } = UniverPresetSheetsCore;
-
-
-  const { univerAPI } = createUniver({
-
-    locale: LocaleType.EN_US,
-
-    locales: {
-      [LocaleType.EN_US]:
-        mergeLocales(
-          UniverPresetSheetsCoreEnUS
-        )
-    },
-
-    presets: [
-      UniverSheetsCorePreset({
-        container: "app"
-      })
-    ]
-
-  });
-
-
-  /* ---------------------------------------
-     Load participant's previous spreadsheet
-     or create a completely blank one
-  --------------------------------------- */
-
-  let savedWorkbook = null;
-
-  try {
-
-    const saved =
-      localStorage.getItem(STORAGE_KEY);
-
-    if (saved) {
-      savedWorkbook = JSON.parse(saved);
+        return;
     }
 
-  } catch (e) {
-    console.error(
-      "Could not load saved spreadsheet:",
-      e
-    );
-  }
+
+    /*
+     * --------------------------------------
+     * 2. Independent storage
+     * --------------------------------------
+     *
+     * Example:
+     *
+     * Participant ABC + task1
+     * HILDA_UNIVER_SHEET_ABC_task1
+     *
+     * Participant ABC + task2
+     * HILDA_UNIVER_SHEET_ABC_task2
+     *
+     * Participant XYZ + task1
+     * HILDA_UNIVER_SHEET_XYZ_task1
+     *
+     */
+
+    const STORAGE_KEY =
+        "HILDA_UNIVER_SHEET_" +
+        participantID +
+        "_" +
+        sheetID;
 
 
-  let workbook;
+    /*
+     * --------------------------------------
+     * 3. Start Univer
+     * --------------------------------------
+     */
 
-  if (savedWorkbook) {
+    const { createUniver } = UniverPresets;
 
-    workbook =
-      univerAPI.createWorkbook(
-        savedWorkbook
-      );
+    const {
+        LocaleType,
+        mergeLocales
+    } = UniverCore;
 
-  } else {
-
-    workbook =
-      univerAPI.createWorkbook({
-        name: "Participant Spreadsheet"
-      });
-
-  }
+    const {
+        UniverSheetsCorePreset
+    } = UniverPresetSheetsCore;
 
 
-  /* ---------------------------------------
-     Autosave
-  --------------------------------------- */
+    const { univerAPI } = createUniver({
 
-  let saveTimer = null;
+        locale: LocaleType.EN_US,
 
-  function saveSpreadsheet() {
+        locales: {
+            [LocaleType.EN_US]:
+                mergeLocales(
+                    UniverPresetSheetsCoreEnUS
+                )
+        },
 
-    clearTimeout(saveTimer);
+        presets: [
+            UniverSheetsCorePreset({
+                container: "app"
+            })
+        ]
 
-    saveTimer = setTimeout(function () {
+    });
 
-      try {
 
-        const snapshot =
-          workbook.save();
+    /*
+     * --------------------------------------
+     * 4. Load this participant's
+     *    spreadsheet for this page
+     * --------------------------------------
+     */
 
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify(snapshot)
-        );
+    let savedWorkbook = null;
 
-      } catch (e) {
+    try {
+
+        const saved =
+            localStorage.getItem(STORAGE_KEY);
+
+        if (saved) {
+            savedWorkbook = JSON.parse(saved);
+        }
+
+    } catch (e) {
 
         console.error(
-          "Could not save spreadsheet:",
-          e
+            "Could not load saved spreadsheet:",
+            e
         );
-
-      }
-
-    }, 300);
-
-  }
-
-
-  /*
-    Save after spreadsheet commands.
-
-    This catches cell edits, formulas,
-    formatting, percentage formatting,
-    row/column operations, etc.
-  */
-
-  workbook.onCommandExecuted(function () {
-    saveSpreadsheet();
-  });
-
-
-  /* Save once more before leaving */
-
-  window.addEventListener(
-    "beforeunload",
-    function () {
-
-      try {
-
-        const snapshot =
-          workbook.save();
-
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify(snapshot)
-        );
-
-      } catch (e) {}
 
     }
-  );
+
+
+    /*
+     * --------------------------------------
+     * 5. Create workbook
+     * --------------------------------------
+     */
+
+    let workbook;
+
+    if (savedWorkbook) {
+
+        workbook =
+            univerAPI.createWorkbook(
+                savedWorkbook
+            );
+
+    } else {
+
+        workbook =
+            univerAPI.createWorkbook({
+                name: "Participant Spreadsheet"
+            });
+
+    }
+
+
+    /*
+     * --------------------------------------
+     * 6. Autosave
+     * --------------------------------------
+     */
+
+    let saveTimer = null;
+
+    function saveSpreadsheet() {
+
+        clearTimeout(saveTimer);
+
+        saveTimer = setTimeout(function () {
+
+            try {
+
+                const snapshot =
+                    workbook.save();
+
+                localStorage.setItem(
+                    STORAGE_KEY,
+                    JSON.stringify(snapshot)
+                );
+
+            } catch (e) {
+
+                console.error(
+                    "Could not save spreadsheet:",
+                    e
+                );
+
+            }
+
+        }, 300);
+
+    }
+
+
+    /*
+     * Save whenever Univer executes
+     * an editing/formatting command.
+     */
+
+    univerAPI.onCommandExecuted(function () {
+
+        saveSpreadsheet();
+
+    });
+
+
+    /*
+     * Save one final time when page closes
+     * or Qualtrics moves to next page.
+     */
+
+    window.addEventListener(
+        "beforeunload",
+        function () {
+
+            try {
+
+                const snapshot =
+                    workbook.save();
+
+                localStorage.setItem(
+                    STORAGE_KEY,
+                    JSON.stringify(snapshot)
+                );
+
+            } catch (e) {
+
+                console.error(
+                    "Final spreadsheet save failed:",
+                    e
+                );
+
+            }
+
+        }
+    );
 
 })();
 </script>
