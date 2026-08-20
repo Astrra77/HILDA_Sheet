@@ -68,14 +68,13 @@ body,
     }
 
 
-    /*
-     * Same workbook across all seven Qualtrics pages.
-     * Different participants still get separate saved copies.
-     */
+    /* =====================================
+       Configuration
+       ===================================== */
 
-    const VERSION = "v2";
+    const VERSION = "delta_v1";
 
-    const KEY =
+    const DELTA_KEY =
         "HILDA_" +
         VERSION +
         "_" +
@@ -87,6 +86,7 @@ body,
 
     /* =====================================
        IndexedDB
+       Only stores changed cells
        ===================================== */
 
     function openDB() {
@@ -95,7 +95,7 @@ body,
 
             const request =
                 indexedDB.open(
-                    "HILDA_DB",
+                    "HILDA_DELTA_DB",
                     1
                 );
 
@@ -107,33 +107,29 @@ body,
 
                     if (
                         !db.objectStoreNames.contains(
-                            "workbooks"
+                            "deltas"
                         )
                     ) {
                         db.createObjectStore(
-                            "workbooks"
+                            "deltas"
                         );
                     }
                 };
 
             request.onsuccess =
                 function () {
-                    resolve(
-                        request.result
-                    );
+                    resolve(request.result);
                 };
 
             request.onerror =
                 function () {
-                    reject(
-                        request.error
-                    );
+                    reject(request.error);
                 };
         });
     }
 
 
-    async function getSaved() {
+    async function loadDeltas() {
 
         const db =
             await openDB();
@@ -143,50 +139,63 @@ body,
             const request =
                 db
                 .transaction(
-                    "workbooks",
+                    "deltas",
                     "readonly"
                 )
                 .objectStore(
-                    "workbooks"
+                    "deltas"
                 )
-                .get(KEY);
+                .get(DELTA_KEY);
 
             request.onsuccess =
                 function () {
-
                     resolve(
-                        request.result ||
-                        null
+                        request.result || {}
                     );
                 };
 
             request.onerror =
                 function () {
-                    resolve(null);
+                    resolve({});
                 };
         });
     }
 
 
-    async function saveWorkbook(snapshot) {
+    async function saveDeltas(deltas) {
 
         const db =
             await openDB();
 
-        const transaction =
-            db.transaction(
-                "workbooks",
-                "readwrite"
-            );
+        return new Promise(function (resolve, reject) {
 
-        transaction
-            .objectStore(
-                "workbooks"
-            )
-            .put(
-                snapshot,
-                KEY
-            );
+            const transaction =
+                db.transaction(
+                    "deltas",
+                    "readwrite"
+                );
+
+            transaction
+                .objectStore(
+                    "deltas"
+                )
+                .put(
+                    deltas,
+                    DELTA_KEY
+                );
+
+            transaction.oncomplete =
+                function () {
+                    resolve();
+                };
+
+            transaction.onerror =
+                function () {
+                    reject(
+                        transaction.error
+                    );
+                };
+        });
     }
 
 
@@ -235,7 +244,91 @@ body,
 
 
     /* =====================================
-       Excel worksheet -> Univer worksheet
+       Convert Excel cell
+       ===================================== */
+
+    function makeCell(
+        source,
+        sheetName
+    ) {
+
+        if (!source) {
+            return null;
+        }
+
+        const cell = {};
+
+
+        /*
+         * Excel Commands contains example
+         * formulas for participants to read.
+         * Keep them as TEXT rather than
+         * asking Univer to calculate them.
+         */
+
+        if (
+            sheetName === "Excel Commands" &&
+            source.f
+        ) {
+
+            cell.v =
+                "=" + source.f;
+
+            return cell;
+        }
+
+
+        /*
+         * Real formula
+         */
+
+        if (source.f) {
+
+            cell.f =
+                source.f.startsWith("=")
+                    ? source.f
+                    : "=" + source.f;
+        }
+
+
+        /*
+         * Value
+         */
+
+        if (
+            source.v !== undefined &&
+            source.v !== null
+        ) {
+
+            cell.v =
+                source.v;
+        }
+
+
+        /*
+         * Number / percentage / date format
+         */
+
+        if (
+            source.z &&
+            source.z !== "General"
+        ) {
+
+            cell.s = {
+                n: {
+                    pattern:
+                        source.z
+                }
+            };
+        }
+
+
+        return cell;
+    }
+
+
+    /* =====================================
+       Convert Excel worksheet
        ===================================== */
 
     function convertSheet(
@@ -254,99 +347,132 @@ body,
 
 
         /*
-         * Cells
+         * Dense mode is faster for
+         * very large worksheets.
          */
 
-        Object.keys(
-            worksheet
-        ).forEach(function (address) {
+        if (worksheet["!data"]) {
 
-            if (
-                address.charAt(0) === "!"
-            ) {
-                return;
-            }
+            const data =
+                worksheet["!data"];
 
-            const source =
-                worksheet[address];
-
-            const position =
-                XLSX.utils.decode_cell(
-                    address
-                );
-
-            rows =
-                Math.max(
-                    rows,
-                    position.r + 1
-                );
-
-            columns =
-                Math.max(
-                    columns,
-                    position.c + 1
-                );
-
-            if (
-                !cellData[position.r]
-            ) {
-                cellData[position.r] = {};
-            }
-
-            const cell = {};
-
-
-            /*
-             * Preserve formula
-             */
-
-            if (source.f) {
-
-                cell.f =
-                    source.f.startsWith("=")
-                        ? source.f
-                        : "=" + source.f;
-            }
-
-
-            /*
-             * Preserve value
-             */
-
-            if (
-                source.v !== undefined
-            ) {
-                cell.v =
-                    source.v;
-            }
-
-
-            /*
-             * Preserve number /
-             * percentage / date formats
-             */
-
-            if (
-                source.z &&
-                source.z !== "General"
+            for (
+                let r = 0;
+                r < data.length;
+                r++
             ) {
 
-                cell.s = {
-                    n: {
-                        pattern:
-                            source.z
+                const row =
+                    data[r];
+
+                if (!row) {
+                    continue;
+                }
+
+                for (
+                    let c = 0;
+                    c < row.length;
+                    c++
+                ) {
+
+                    const source =
+                        row[c];
+
+                    if (!source) {
+                        continue;
                     }
-                };
+
+                    const cell =
+                        makeCell(
+                            source,
+                            name
+                        );
+
+                    if (!cell) {
+                        continue;
+                    }
+
+                    if (!cellData[r]) {
+                        cellData[r] = {};
+                    }
+
+                    cellData[r][c] =
+                        cell;
+
+                    rows =
+                        Math.max(
+                            rows,
+                            r + 1
+                        );
+
+                    columns =
+                        Math.max(
+                            columns,
+                            c + 1
+                        );
+                }
             }
 
+        } else {
 
-            cellData[position.r][position.c] =
-                cell;
-        });
+            /*
+             * Fallback for sparse worksheets
+             */
+
+            Object.keys(
+                worksheet
+            ).forEach(function (address) {
+
+                if (
+                    address.charAt(0) === "!"
+                ) {
+                    return;
+                }
+
+                const source =
+                    worksheet[address];
+
+                const position =
+                    XLSX.utils.decode_cell(
+                        address
+                    );
+
+                const cell =
+                    makeCell(
+                        source,
+                        name
+                    );
+
+                if (!cell) {
+                    return;
+                }
+
+                if (
+                    !cellData[position.r]
+                ) {
+                    cellData[position.r] = {};
+                }
+
+                cellData[position.r][position.c] =
+                    cell;
+
+                rows =
+                    Math.max(
+                        rows,
+                        position.r + 1
+                    );
+
+                columns =
+                    Math.max(
+                        columns,
+                        position.c + 1
+                    );
+            });
+        }
 
 
         /*
-         * Excel column widths
+         * Column widths
          */
 
         if (
@@ -382,14 +508,13 @@ body,
                             w: width
                         };
                     }
-
                 }
             );
         }
 
 
         /*
-         * Excel row heights
+         * Row heights
          */
 
         if (
@@ -426,14 +551,13 @@ body,
                             h: height
                         };
                     }
-
                 }
             );
         }
 
 
         /*
-         * Excel merged cells
+         * Merged cells
          */
 
         if (
@@ -460,7 +584,6 @@ body,
                             merge.e.c
 
                     });
-
                 }
             );
         }
@@ -509,13 +632,12 @@ body,
             columnHeader: {
                 height: 20
             }
-
         };
     }
 
 
     /* =====================================
-       Load XLSX
+       Load original XLSX
        ===================================== */
 
     async function loadTemplate() {
@@ -524,7 +646,8 @@ body,
             await fetch(
                 FILE,
                 {
-                    cache: "no-store"
+                    cache:
+                        "no-store"
                 }
             );
 
@@ -541,13 +664,26 @@ body,
             await response.arrayBuffer();
 
 
+        /*
+         * dense:true is important for
+         * the large HILDA data worksheet.
+         */
+
         const excel =
             XLSX.read(
                 buffer,
                 {
-                    cellFormula: true,
-                    cellStyles: true,
-                    cellNF: true
+                    dense:
+                        true,
+
+                    cellFormula:
+                        true,
+
+                    cellStyles:
+                        true,
+
+                    cellNF:
+                        true
                 }
             );
 
@@ -601,24 +737,47 @@ body,
 
             sheets:
                 sheets
-
         };
     }
 
 
     /* =====================================
-       Load saved participant copy
-       OR original Excel workbook
+       Clone small cell objects safely
+       ===================================== */
+
+    function cloneCell(cell) {
+
+        if (
+            cell === null ||
+            cell === undefined
+        ) {
+            return null;
+        }
+
+        if (
+            typeof structuredClone ===
+            "function"
+        ) {
+            return structuredClone(cell);
+        }
+
+        return JSON.parse(
+            JSON.stringify(cell)
+        );
+    }
+
+
+    /* =====================================
+       Load workbook + participant deltas
        ===================================== */
 
     try {
 
-        const saved =
-            await getSaved();
-
+        /*
+         * Always start from original Excel.
+         */
 
         const snapshot =
-            saved ||
             await loadTemplate();
 
 
@@ -626,6 +785,93 @@ body,
             univerAPI.createWorkbook(
                 snapshot
             );
+
+
+        /*
+         * Load ONLY this participant's
+         * changed cells.
+         */
+
+        let deltas =
+            await loadDeltas();
+
+
+        /*
+         * Restore previous participant edits.
+         */
+
+        Object.keys(
+            deltas
+        ).forEach(
+            function (sheetName) {
+
+                const worksheet =
+                    workbook.getSheetByName(
+                        sheetName
+                    );
+
+                if (!worksheet) {
+                    return;
+                }
+
+                const sheetDeltas =
+                    deltas[sheetName];
+
+                Object.keys(
+                    sheetDeltas
+                ).forEach(
+                    function (position) {
+
+                        const parts =
+                            position.split(",");
+
+                        const row =
+                            Number(parts[0]);
+
+                        const column =
+                            Number(parts[1]);
+
+                        const cell =
+                            sheetDeltas[position];
+
+
+                        const range =
+                            worksheet.getRange(
+                                row,
+                                column
+                            );
+
+
+                        /*
+                         * null means participant
+                         * cleared this cell.
+                         */
+
+                        if (
+                            cell === null
+                        ) {
+
+                            range.setValue(
+                                null
+                            );
+
+                        } else {
+
+                            /*
+                             * ICellData can include:
+                             * v = value
+                             * f = formula
+                             * s = number format/style
+                             */
+
+                            range.setValue(
+                                cell
+                            );
+                        }
+                    }
+                );
+            }
+        );
 
 
         document
@@ -637,33 +883,135 @@ body,
 
 
         /* =================================
-           Autosave
+           DELTA AUTOSAVE
+           =================================
+           No workbook.save() anywhere.
            ================================= */
 
-        let saveTimer;
+        let saveTimer =
+            null;
 
-/*
-        univerAPI.onCommandExecuted(
-            function () {
 
-                clearTimeout(
-                    saveTimer
+        function scheduleDeltaSave() {
+
+            clearTimeout(
+                saveTimer
+            );
+
+            saveTimer =
+                setTimeout(
+                    function () {
+
+                        saveDeltas(
+                            deltas
+                        ).catch(
+                            console.error
+                        );
+
+                    },
+                    250
                 );
+        }
 
-                saveTimer =
-                    setTimeout(
-                        function () {
 
-                            saveWorkbook(
-                                workbook.save()
+        /*
+         * Listen for changes separately
+         * on every worksheet.
+         *
+         * onCellDataChange returns ONLY
+         * cells that actually changed.
+         */
+
+        workbook
+            .getSheets()
+            .forEach(
+                function (worksheet) {
+
+                    const sheetName =
+                        worksheet.getSheetName();
+
+
+                    worksheet.onCellDataChange(
+                        function (
+                            changedCells
+                        ) {
+
+                            if (
+                                !deltas[
+                                    sheetName
+                                ]
+                            ) {
+
+                                deltas[
+                                    sheetName
+                                ] = {};
+                            }
+
+
+                            const matrix =
+                                changedCells
+                                    .getMatrix();
+
+
+                            Object.keys(
+                                matrix
+                            ).forEach(
+                                function (
+                                    rowKey
+                                ) {
+
+                                    const row =
+                                        matrix[
+                                            rowKey
+                                        ];
+
+                                    if (!row) {
+                                        return;
+                                    }
+
+
+                                    Object.keys(
+                                        row
+                                    ).forEach(
+                                        function (
+                                            columnKey
+                                        ) {
+
+                                            const cell =
+                                                row[
+                                                    columnKey
+                                                ];
+
+
+                                            const key =
+                                                rowKey +
+                                                "," +
+                                                columnKey;
+
+
+                                            deltas[
+                                                sheetName
+                                            ][key] =
+                                                cloneCell(
+                                                    cell
+                                                );
+                                        }
+                                    );
+                                }
                             );
 
-                        },
-                        500
-                    );*/
-            }
-        );
 
+                            scheduleDeltaSave();
+                        }
+                    );
+                }
+            );
+
+
+        /*
+         * Final lightweight save when
+         * leaving / switching Qualtrics page.
+         */
 
         document.addEventListener(
             "visibilitychange",
@@ -674,8 +1022,14 @@ body,
                     "hidden"
                 ) {
 
-                    saveWorkbook(
-                        workbook.save()
+                    clearTimeout(
+                        saveTimer
+                    );
+
+                    saveDeltas(
+                        deltas
+                    ).catch(
+                        console.error
                     );
                 }
             }
@@ -686,8 +1040,14 @@ body,
             "pagehide",
             function () {
 
-                saveWorkbook(
-                    workbook.save()
+                clearTimeout(
+                    saveTimer
+                );
+
+                saveDeltas(
+                    deltas
+                ).catch(
+                    console.error
                 );
             }
         );
