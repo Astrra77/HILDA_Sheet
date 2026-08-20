@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+
 <title>HILDA Spreadsheet</title>
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -16,11 +17,15 @@
 <script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/index.js"></script>
 <script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/locales/en-US.js"></script>
 
-<link rel="stylesheet"
-href="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/index.css">
+<link
+    rel="stylesheet"
+    href="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/index.css"
+>
 
 <style>
-html, body, #app {
+html,
+body,
+#app {
     width: 100%;
     height: 100%;
     margin: 0;
@@ -36,6 +41,7 @@ html, body, #app {
     justify-content: center;
     background: white;
     font-family: Arial, sans-serif;
+    font-size: 16px;
     z-index: 9999;
 }
 </style>
@@ -49,8 +55,11 @@ html, body, #app {
 <script>
 (async function () {
 
-    const params = new URLSearchParams(location.search);
-    const pid = params.get("pid");
+    const params =
+        new URLSearchParams(window.location.search);
+
+    const pid =
+        params.get("pid");
 
     if (!pid) {
         document.getElementById("status").textContent =
@@ -58,230 +67,616 @@ html, body, #app {
         return;
     }
 
+
     /*
-     * All seven Qualtrics pages use the SAME workbook.
-     * Different participants still have separate saved copies.
-     *
-     * Change v1 to v2 during testing if you want everybody
-     * to start again from a fresh HILDA.xlsx.
+     * Same workbook across all seven Qualtrics pages.
+     * Different participants still get separate saved copies.
      */
-    const VERSION = "v1";
-    const KEY = "HILDA_" + VERSION + "_" + pid;
-    const FILE = "./HILDA_COVID_structured_v3.xlsx";
+
+    const VERSION = "v2";
+
+    const KEY =
+        "HILDA_" +
+        VERSION +
+        "_" +
+        pid;
+
+    const FILE =
+        "./HILDA_COVID_structured_v3.xlsx";
 
 
-    /* ---------- IndexedDB ---------- */
+    /* =====================================
+       IndexedDB
+       ===================================== */
 
     function openDB() {
+
         return new Promise(function (resolve, reject) {
 
-            const request = indexedDB.open("HILDA_DB", 1);
+            const request =
+                indexedDB.open(
+                    "HILDA_DB",
+                    1
+                );
 
-            request.onupgradeneeded = function (e) {
-                const db = e.target.result;
+            request.onupgradeneeded =
+                function (event) {
 
-                if (!db.objectStoreNames.contains("workbooks")) {
-                    db.createObjectStore("workbooks");
-                }
-            };
+                    const db =
+                        event.target.result;
 
-            request.onsuccess = function () {
-                resolve(request.result);
-            };
+                    if (
+                        !db.objectStoreNames.contains(
+                            "workbooks"
+                        )
+                    ) {
+                        db.createObjectStore(
+                            "workbooks"
+                        );
+                    }
+                };
 
-            request.onerror = function () {
-                reject(request.error);
-            };
+            request.onsuccess =
+                function () {
+                    resolve(
+                        request.result
+                    );
+                };
+
+            request.onerror =
+                function () {
+                    reject(
+                        request.error
+                    );
+                };
         });
     }
 
 
     async function getSaved() {
-        const db = await openDB();
+
+        const db =
+            await openDB();
 
         return new Promise(function (resolve) {
 
-            const request = db
-                .transaction("workbooks")
-                .objectStore("workbooks")
+            const request =
+                db
+                .transaction(
+                    "workbooks",
+                    "readonly"
+                )
+                .objectStore(
+                    "workbooks"
+                )
                 .get(KEY);
 
-            request.onsuccess = function () {
-                resolve(request.result || null);
-            };
+            request.onsuccess =
+                function () {
 
-            request.onerror = function () {
-                resolve(null);
-            };
+                    resolve(
+                        request.result ||
+                        null
+                    );
+                };
+
+            request.onerror =
+                function () {
+                    resolve(null);
+                };
         });
     }
 
 
-    async function save(snapshot) {
-        const db = await openDB();
+    async function saveWorkbook(snapshot) {
 
-        const tx = db.transaction(
-            "workbooks",
-            "readwrite"
-        );
+        const db =
+            await openDB();
 
-        tx.objectStore("workbooks")
-          .put(snapshot, KEY);
+        const transaction =
+            db.transaction(
+                "workbooks",
+                "readwrite"
+            );
+
+        transaction
+            .objectStore(
+                "workbooks"
+            )
+            .put(
+                snapshot,
+                KEY
+            );
     }
 
 
-    /* ---------- Univer ---------- */
+    /* =====================================
+       Start Univer
+       ===================================== */
 
-    const { createUniver } = UniverPresets;
-    const { LocaleType, mergeLocales } = UniverCore;
-    const { UniverSheetsCorePreset } = UniverPresetSheetsCore;
+    const {
+        createUniver
+    } = UniverPresets;
 
-    const { univerAPI } = createUniver({
+    const {
+        LocaleType,
+        mergeLocales
+    } = UniverCore;
 
-        locale: LocaleType.EN_US,
+    const {
+        UniverSheetsCorePreset
+    } = UniverPresetSheetsCore;
+
+
+    const {
+        univerAPI
+    } = createUniver({
+
+        locale:
+            LocaleType.EN_US,
 
         locales: {
+
             [LocaleType.EN_US]:
+
                 mergeLocales(
                     UniverPresetSheetsCoreEnUS
                 )
         },
 
         presets: [
+
             UniverSheetsCorePreset({
                 container: "app"
             })
+
         ]
     });
 
 
-    /* ---------- Excel → Univer ---------- */
+    /* =====================================
+       Excel worksheet -> Univer worksheet
+       ===================================== */
 
-    function convertSheet(ws, name, index) {
+    function convertSheet(
+        worksheet,
+        name,
+        index
+    ) {
 
         const cellData = {};
+        const columnData = {};
+        const rowData = {};
+        const mergeData = [];
+
         let rows = 1000;
-        let cols = 26;
+        let columns = 26;
 
-        Object.keys(ws).forEach(function (address) {
 
-            if (address[0] === "!") return;
+        /*
+         * Cells
+         */
 
-            const source = ws[address];
-            const pos = XLSX.utils.decode_cell(address);
+        Object.keys(
+            worksheet
+        ).forEach(function (address) {
 
-            rows = Math.max(rows, pos.r + 1);
-            cols = Math.max(cols, pos.c + 1);
+            if (
+                address.charAt(0) === "!"
+            ) {
+                return;
+            }
 
-            if (!cellData[pos.r]) {
-                cellData[pos.r] = {};
+            const source =
+                worksheet[address];
+
+            const position =
+                XLSX.utils.decode_cell(
+                    address
+                );
+
+            rows =
+                Math.max(
+                    rows,
+                    position.r + 1
+                );
+
+            columns =
+                Math.max(
+                    columns,
+                    position.c + 1
+                );
+
+            if (
+                !cellData[position.r]
+            ) {
+                cellData[position.r] = {};
             }
 
             const cell = {};
 
+
+            /*
+             * Preserve formula
+             */
+
             if (source.f) {
-                cell.f = source.f.startsWith("=")
-                    ? source.f
-                    : "=" + source.f;
+
+                cell.f =
+                    source.f.startsWith("=")
+                        ? source.f
+                        : "=" + source.f;
             }
 
-            if (source.v !== undefined) {
-                cell.v = source.v;
+
+            /*
+             * Preserve value
+             */
+
+            if (
+                source.v !== undefined
+            ) {
+                cell.v =
+                    source.v;
             }
 
-            cellData[pos.r][pos.c] = cell;
+
+            /*
+             * Preserve number /
+             * percentage / date formats
+             */
+
+            if (
+                source.z &&
+                source.z !== "General"
+            ) {
+
+                cell.s = {
+                    n: {
+                        pattern:
+                            source.z
+                    }
+                };
+            }
+
+
+            cellData[position.r][position.c] =
+                cell;
         });
 
+
+        /*
+         * Excel column widths
+         */
+
+        if (
+            Array.isArray(
+                worksheet["!cols"]
+            )
+        ) {
+
+            worksheet["!cols"].forEach(
+                function (column, i) {
+
+                    if (!column) {
+                        return;
+                    }
+
+                    let width =
+                        column.wpx;
+
+                    if (
+                        !width &&
+                        column.wch
+                    ) {
+
+                        width =
+                            Math.round(
+                                column.wch * 7 + 5
+                            );
+                    }
+
+                    if (width) {
+
+                        columnData[i] = {
+                            w: width
+                        };
+                    }
+
+                }
+            );
+        }
+
+
+        /*
+         * Excel row heights
+         */
+
+        if (
+            Array.isArray(
+                worksheet["!rows"]
+            )
+        ) {
+
+            worksheet["!rows"].forEach(
+                function (row, i) {
+
+                    if (!row) {
+                        return;
+                    }
+
+                    let height =
+                        row.hpx;
+
+                    if (
+                        !height &&
+                        row.hpt
+                    ) {
+
+                        height =
+                            Math.round(
+                                row.hpt *
+                                96 / 72
+                            );
+                    }
+
+                    if (height) {
+
+                        rowData[i] = {
+                            h: height
+                        };
+                    }
+
+                }
+            );
+        }
+
+
+        /*
+         * Excel merged cells
+         */
+
+        if (
+            Array.isArray(
+                worksheet["!merges"]
+            )
+        ) {
+
+            worksheet["!merges"].forEach(
+                function (merge) {
+
+                    mergeData.push({
+
+                        startRow:
+                            merge.s.r,
+
+                        endRow:
+                            merge.e.r,
+
+                        startColumn:
+                            merge.s.c,
+
+                        endColumn:
+                            merge.e.c
+
+                    });
+
+                }
+            );
+        }
+
+
         return {
-            id: "sheet_" + index,
-            name: name,
-            rowCount: rows,
-            columnCount: cols,
-            cellData: cellData
+
+            id:
+                "sheet_" +
+                index,
+
+            name:
+                name,
+
+            rowCount:
+                rows,
+
+            columnCount:
+                columns,
+
+            defaultColumnWidth:
+                88,
+
+            defaultRowHeight:
+                22,
+
+            cellData:
+                cellData,
+
+            columnData:
+                columnData,
+
+            rowData:
+                rowData,
+
+            mergeData:
+                mergeData,
+
+            showGridlines:
+                1,
+
+            rowHeader: {
+                width: 46
+            },
+
+            columnHeader: {
+                height: 20
+            }
+
         };
     }
 
 
+    /* =====================================
+       Load XLSX
+       ===================================== */
+
     async function loadTemplate() {
 
-        const response = await fetch(
-            FILE,
-            { cache: "no-store" }
-        );
+        const response =
+            await fetch(
+                FILE,
+                {
+                    cache: "no-store"
+                }
+            );
 
         if (!response.ok) {
-            throw new Error("Cannot load " + FILE);
+
+            throw new Error(
+                "Cannot load " +
+                FILE
+            );
         }
 
-        const buffer = await response.arrayBuffer();
 
-        const excel = XLSX.read(
-            buffer,
-            { cellFormula: true }
-        );
+        const buffer =
+            await response.arrayBuffer();
+
+
+        const excel =
+            XLSX.read(
+                buffer,
+                {
+                    cellFormula: true,
+                    cellStyles: true,
+                    cellNF: true
+                }
+            );
+
 
         const sheets = {};
         const sheetOrder = [];
 
-        excel.SheetNames.forEach(function (name, index) {
 
-            const converted = convertSheet(
-                excel.Sheets[name],
+        excel.SheetNames.forEach(
+            function (
                 name,
                 index
-            );
+            ) {
 
-            sheets[converted.id] = converted;
-            sheetOrder.push(converted.id);
-        });
+                const converted =
+                    convertSheet(
+                        excel.Sheets[name],
+                        name,
+                        index
+                    );
+
+                sheets[
+                    converted.id
+                ] =
+                    converted;
+
+                sheetOrder.push(
+                    converted.id
+                );
+            }
+        );
+
 
         return {
-            id: "HILDA_" + pid,
-            name: "HILDA Spreadsheet",
-            locale: LocaleType.EN_US,
-            styles: {},
-            sheetOrder: sheetOrder,
-            sheets: sheets
+
+            id:
+                "HILDA_" +
+                pid,
+
+            name:
+                "HILDA Spreadsheet",
+
+            locale:
+                LocaleType.EN_US,
+
+            styles:
+                {},
+
+            sheetOrder:
+                sheetOrder,
+
+            sheets:
+                sheets
+
         };
     }
 
 
-    /* ---------- Load / restore ---------- */
+    /* =====================================
+       Load saved participant copy
+       OR original Excel workbook
+       ===================================== */
 
     try {
 
-        const saved = await getSaved();
+        const saved =
+            await getSaved();
+
 
         const snapshot =
-            saved || await loadTemplate();
+            saved ||
+            await loadTemplate();
+
 
         const workbook =
-            univerAPI.createWorkbook(snapshot);
+            univerAPI.createWorkbook(
+                snapshot
+            );
 
-        document.getElementById("status").style.display =
-            "none";
+
+        document
+            .getElementById(
+                "status"
+            )
+            .style.display =
+                "none";
 
 
-        /* ---------- Autosave ---------- */
+        /* =================================
+           Autosave
+           ================================= */
 
-        let timer;
+        let saveTimer;
 
-        univerAPI.onCommandExecuted(function () {
 
-            clearTimeout(timer);
+        univerAPI.onCommandExecuted(
+            function () {
 
-            timer = setTimeout(function () {
-                save(workbook.save());
-            }, 500);
-        });
+                clearTimeout(
+                    saveTimer
+                );
+
+                saveTimer =
+                    setTimeout(
+                        function () {
+
+                            saveWorkbook(
+                                workbook.save()
+                            );
+
+                        },
+                        500
+                    );
+            }
+        );
 
 
         document.addEventListener(
             "visibilitychange",
             function () {
 
-                if (document.visibilityState === "hidden") {
-                    save(workbook.save());
+                if (
+                    document.visibilityState ===
+                    "hidden"
+                ) {
+
+                    saveWorkbook(
+                        workbook.save()
+                    );
                 }
             }
         );
@@ -290,17 +685,28 @@ html, body, #app {
         window.addEventListener(
             "pagehide",
             function () {
-                save(workbook.save());
+
+                saveWorkbook(
+                    workbook.save()
+                );
             }
         );
 
+
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            error
+        );
 
-        document.getElementById("status").textContent =
-            "Spreadsheet could not be loaded: " +
-            error.message;
+        document
+            .getElementById(
+                "status"
+            )
+            .textContent =
+
+                "Spreadsheet could not be loaded: " +
+                error.message;
     }
 
 })();
