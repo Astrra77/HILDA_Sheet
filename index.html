@@ -18,14 +18,22 @@
 <script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/index.js"></script>
 <script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/locales/en-US.js"></script>
 
+<!-- Filter dependencies -->
+<script src="https://unpkg.com/@univerjs/sheets-filter@0.25.0/lib/umd/index.js"></script>
+<script src="https://unpkg.com/@univerjs/sheets-filter-ui@0.25.0/lib/umd/index.js"></script>
+
 <script src="https://unpkg.com/@univerjs/preset-sheets-filter@0.25.0/lib/umd/index.js"></script>
 <script src="https://unpkg.com/@univerjs/preset-sheets-filter@0.25.0/lib/umd/locales/en-US.js"></script>
 
-<link rel="stylesheet"
-href="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/index.css">
+<link
+    rel="stylesheet"
+    href="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/index.css"
+>
 
-<link rel="stylesheet"
-href="https://unpkg.com/@univerjs/preset-sheets-filter@0.25.0/lib/index.css">
+<link
+    rel="stylesheet"
+    href="https://unpkg.com/@univerjs/preset-sheets-filter@0.25.0/lib/index.css"
+>
 
 <style>
 
@@ -111,11 +119,17 @@ body {
         params.get("pid");
 
     if (!pid) {
+
         document.getElementById("status").textContent =
             "Missing participant ID.";
+
         return;
     }
 
+
+    /* =========================
+       CONFIG
+       ========================= */
 
     const VERSION =
         "delta_v1";
@@ -131,7 +145,7 @@ body {
 
 
     /* =========================
-       IndexedDB
+       INDEXED DB
        ========================= */
 
     function openDB() {
@@ -155,6 +169,7 @@ body {
                             "deltas"
                         )
                     ) {
+
                         db.createObjectStore(
                             "deltas"
                         );
@@ -163,12 +178,18 @@ body {
 
             request.onsuccess =
                 function () {
-                    resolve(request.result);
+
+                    resolve(
+                        request.result
+                    );
                 };
 
             request.onerror =
                 function () {
-                    reject(request.error);
+
+                    reject(
+                        request.error
+                    );
                 };
 
         });
@@ -197,6 +218,7 @@ body {
 
             request.onsuccess =
                 function () {
+
                     resolve(
                         request.result || {}
                     );
@@ -204,6 +226,7 @@ body {
 
             request.onerror =
                 function () {
+
                     resolve({});
                 };
 
@@ -218,13 +241,13 @@ body {
 
         return new Promise(function (resolve, reject) {
 
-            const tx =
+            const transaction =
                 db.transaction(
                     "deltas",
                     "readwrite"
                 );
 
-            tx
+            transaction
                 .objectStore(
                     "deltas"
                 )
@@ -233,13 +256,14 @@ body {
                     DELTA_KEY
                 );
 
-            tx.oncomplete =
+            transaction.oncomplete =
                 resolve;
 
-            tx.onerror =
+            transaction.onerror =
                 function () {
+
                     reject(
-                        tx.error
+                        transaction.error
                     );
                 };
 
@@ -248,579 +272,568 @@ body {
 
 
     /* =========================
-       Univer
+       START UNIVER
        ========================= */
 
-    const {
-        createUniver
-    } = UniverPresets;
+    try {
 
-    const {
-        LocaleType,
-        mergeLocales
-    } = UniverCore;
+        const {
+            createUniver
+        } = UniverPresets;
 
-    const {
-        UniverSheetsCorePreset
-    } = UniverPresetSheetsCore;
+        const {
+            LocaleType,
+            mergeLocales
+        } = UniverCore;
 
+        const {
+            UniverSheetsCorePreset
+        } = UniverPresetSheetsCore;
 
-    const FilterPreset =
-        typeof window.UniverSheetsFilterPreset === "function"
-            ? window.UniverSheetsFilterPreset
-            : window.UniverSheetsFilterPreset
-                .UniverSheetsFilterPreset;
-
-
-    const {
-        univerAPI
-    } = createUniver({
-
-        locale:
-            LocaleType.EN_US,
-
-        locales: {
-
-            [LocaleType.EN_US]:
-
-                mergeLocales(
-                    UniverPresetSheetsCoreEnUS,
-                    UniverPresetSheetsFilterEnUS
-                )
-        },
-
-        presets: [
-
-            UniverSheetsCorePreset({
-                container: "app"
-            }),
-
-            FilterPreset()
-
-        ]
-
-    });
+        const {
+            UniverSheetsFilterPreset
+        } = UniverPresetSheetsFilter;
 
 
-    /* =========================
-       Excel import
-       ========================= */
+        const {
+            univerAPI
+        } = createUniver({
 
-    function makeCell(
-        source,
-        sheetName
-    ) {
+            locale:
+                LocaleType.EN_US,
 
-        if (!source) {
-            return null;
-        }
+            locales: {
 
-        const cell = {};
+                [LocaleType.EN_US]:
+
+                    mergeLocales(
+                        UniverPresetSheetsCoreEnUS,
+                        UniverPresetSheetsFilterEnUS
+                    )
+            },
+
+            presets: [
+
+                UniverSheetsCorePreset({
+                    container: "app"
+                }),
+
+                UniverSheetsFilterPreset()
+
+            ]
+
+        });
 
 
-        if (
-            sheetName === "Excel Commands" &&
-            source.f
+        /* =========================
+           EXCEL IMPORT
+           ========================= */
+
+        function makeCell(
+            source,
+            sheetName
         ) {
 
-            cell.v =
-                "=" + source.f;
+            if (!source) {
+                return null;
+            }
+
+            const cell = {};
+
+
+            if (
+                sheetName === "Excel Commands" &&
+                source.f
+            ) {
+
+                cell.v =
+                    "=" + source.f;
+
+                return cell;
+            }
+
+
+            if (source.f) {
+
+                cell.f =
+                    source.f.startsWith("=")
+                        ? source.f
+                        : "=" + source.f;
+            }
+
+
+            if (
+                source.v !== undefined &&
+                source.v !== null
+            ) {
+
+                cell.v =
+                    source.v;
+            }
+
+
+            if (
+                source.z &&
+                source.z !== "General"
+            ) {
+
+                cell.s = {
+
+                    n: {
+                        pattern:
+                            source.z
+                    }
+
+                };
+            }
+
 
             return cell;
         }
 
 
-        if (source.f) {
-
-            cell.f =
-                source.f.startsWith("=")
-                    ? source.f
-                    : "=" + source.f;
-        }
-
-
-        if (
-            source.v !== undefined &&
-            source.v !== null
+        function convertSheet(
+            worksheet,
+            name,
+            index
         ) {
 
-            cell.v =
-                source.v;
-        }
+            const cellData = {};
+            const columnData = {};
+            const rowData = {};
+            const mergeData = [];
+
+            let rows = 1000;
+            let columns = 26;
 
 
-        if (
-            source.z &&
-            source.z !== "General"
-        ) {
+            if (worksheet["!data"]) {
 
-            cell.s = {
-                n: {
-                    pattern:
-                        source.z
-                }
-            };
-        }
-
-
-        return cell;
-    }
-
-
-    function convertSheet(
-        worksheet,
-        name,
-        index
-    ) {
-
-        const cellData = {};
-        const columnData = {};
-        const rowData = {};
-        const mergeData = [];
-
-        let rows = 1000;
-        let columns = 26;
-
-
-        if (worksheet["!data"]) {
-
-            const data =
-                worksheet["!data"];
-
-            for (
-                let r = 0;
-                r < data.length;
-                r++
-            ) {
-
-                const row =
-                    data[r];
-
-                if (!row) {
-                    continue;
-                }
+                const data =
+                    worksheet["!data"];
 
                 for (
-                    let c = 0;
-                    c < row.length;
-                    c++
+                    let r = 0;
+                    r < data.length;
+                    r++
                 ) {
 
-                    const source =
-                        row[c];
+                    const row =
+                        data[r];
 
-                    if (!source) {
+                    if (!row) {
                         continue;
                     }
 
+
+                    for (
+                        let c = 0;
+                        c < row.length;
+                        c++
+                    ) {
+
+                        const source =
+                            row[c];
+
+                        if (!source) {
+                            continue;
+                        }
+
+
+                        const cell =
+                            makeCell(
+                                source,
+                                name
+                            );
+
+                        if (!cell) {
+                            continue;
+                        }
+
+
+                        if (!cellData[r]) {
+                            cellData[r] = {};
+                        }
+
+                        cellData[r][c] =
+                            cell;
+
+
+                        rows =
+                            Math.max(
+                                rows,
+                                r + 1
+                            );
+
+                        columns =
+                            Math.max(
+                                columns,
+                                c + 1
+                            );
+                    }
+                }
+
+            } else {
+
+                Object.keys(
+                    worksheet
+                ).forEach(function (address) {
+
+                    if (
+                        address.charAt(0) === "!"
+                    ) {
+                        return;
+                    }
+
+
+                    const position =
+                        XLSX.utils.decode_cell(
+                            address
+                        );
+
                     const cell =
                         makeCell(
-                            source,
+                            worksheet[address],
                             name
                         );
 
                     if (!cell) {
-                        continue;
+                        return;
                     }
 
-                    if (!cellData[r]) {
-                        cellData[r] = {};
+
+                    if (!cellData[position.r]) {
+                        cellData[position.r] = {};
                     }
 
-                    cellData[r][c] =
-                        cell;
+                    cellData[
+                        position.r
+                    ][
+                        position.c
+                    ] = cell;
+
 
                     rows =
                         Math.max(
                             rows,
-                            r + 1
+                            position.r + 1
                         );
 
                     columns =
                         Math.max(
                             columns,
-                            c + 1
+                            position.c + 1
                         );
-                }
+
+                });
             }
 
-        } else {
 
-            Object.keys(
-                worksheet
-            ).forEach(function (address) {
-
-                if (
-                    address.charAt(0) === "!"
-                ) {
-                    return;
-                }
-
-                const source =
-                    worksheet[address];
-
-                const position =
-                    XLSX.utils.decode_cell(
-                        address
-                    );
-
-                const cell =
-                    makeCell(
-                        source,
-                        name
-                    );
-
-                if (!cell) {
-                    return;
-                }
-
-                if (!cellData[position.r]) {
-                    cellData[position.r] = {};
-                }
-
-                cellData[
-                    position.r
-                ][
-                    position.c
-                ] = cell;
-
-                rows =
-                    Math.max(
-                        rows,
-                        position.r + 1
-                    );
-
-                columns =
-                    Math.max(
-                        columns,
-                        position.c + 1
-                    );
-
-            });
-
-        }
-
-
-        if (
-            Array.isArray(
-                worksheet["!cols"]
-            )
-        ) {
-
-            worksheet["!cols"]
-                .forEach(function (column, i) {
-
-                    if (!column) {
-                        return;
-                    }
-
-                    let width =
-                        column.wpx;
-
-                    if (
-                        !width &&
-                        column.wch
-                    ) {
-
-                        width =
-                            Math.round(
-                                column.wch * 7 + 5
-                            );
-                    }
-
-                    if (width) {
-
-                        columnData[i] = {
-                            w: width
-                        };
-                    }
-
-                });
-        }
-
-
-        if (
-            Array.isArray(
-                worksheet["!rows"]
-            )
-        ) {
-
-            worksheet["!rows"]
-                .forEach(function (row, i) {
-
-                    if (!row) {
-                        return;
-                    }
-
-                    let height =
-                        row.hpx;
-
-                    if (
-                        !height &&
-                        row.hpt
-                    ) {
-
-                        height =
-                            Math.round(
-                                row.hpt *
-                                96 / 72
-                            );
-                    }
-
-                    if (height) {
-
-                        rowData[i] = {
-                            h: height
-                        };
-                    }
-
-                });
-        }
-
-
-        if (
-            Array.isArray(
-                worksheet["!merges"]
-            )
-        ) {
-
-            worksheet["!merges"]
-                .forEach(function (merge) {
-
-                    mergeData.push({
-
-                        startRow:
-                            merge.s.r,
-
-                        endRow:
-                            merge.e.r,
-
-                        startColumn:
-                            merge.s.c,
-
-                        endColumn:
-                            merge.e.c
-
-                    });
-
-                });
-        }
-
-
-        return {
-
-            id:
-                "sheet_" +
-                index,
-
-            name:
-                name,
-
-            rowCount:
-                rows,
-
-            columnCount:
-                columns,
-
-            defaultColumnWidth:
-                88,
-
-            defaultRowHeight:
-                22,
-
-            cellData:
-                cellData,
-
-            columnData:
-                columnData,
-
-            rowData:
-                rowData,
-
-            mergeData:
-                mergeData,
-
-            showGridlines:
-                1,
-
-            rowHeader: {
-                width: 46
-            },
-
-            columnHeader: {
-                height: 20
-            }
-
-        };
-    }
-
-
-    async function loadTemplate() {
-
-        const response =
-            await fetch(
-                FILE,
-                {
-                    cache:
-                        "no-store"
-                }
-            );
-
-        if (!response.ok) {
-
-            throw new Error(
-                "Cannot load " +
-                FILE
-            );
-        }
-
-
-        const buffer =
-            await response.arrayBuffer();
-
-
-        const excel =
-            XLSX.read(
-                buffer,
-                {
-                    dense:
-                        true,
-
-                    cellFormula:
-                        true,
-
-                    cellStyles:
-                        true,
-
-                    cellNF:
-                        true
-                }
-            );
-
-
-        const sheets = {};
-        const sheetOrder = [];
-
-
-        excel.SheetNames
-            .forEach(function (
-                name,
-                index
+            if (
+                Array.isArray(
+                    worksheet["!cols"]
+                )
             ) {
 
-                const converted =
-                    convertSheet(
-                        excel.Sheets[name],
-                        name,
-                        index
-                    );
+                worksheet["!cols"]
+                    .forEach(function (column, i) {
 
-                sheets[
-                    converted.id
-                ] = converted;
+                        if (!column) {
+                            return;
+                        }
 
-                sheetOrder.push(
-                    converted.id
-                );
+                        let width =
+                            column.wpx;
 
-            });
+                        if (
+                            !width &&
+                            column.wch
+                        ) {
 
-
-        return {
-
-            id:
-                "HILDA_" +
-                pid,
-
-            name:
-                "HILDA Spreadsheet",
-
-            locale:
-                LocaleType.EN_US,
-
-            styles:
-                {},
-
-            sheetOrder:
-                sheetOrder,
-
-            sheets:
-                sheets
-
-        };
-    }
+                            width =
+                                Math.round(
+                                    column.wch * 7 + 5
+                                );
+                        }
 
 
-    function cloneCell(cell) {
+                        if (width) {
 
-        if (
-            cell === null ||
-            cell === undefined
-        ) {
-            return null;
+                            columnData[i] = {
+                                w: width
+                            };
+                        }
+
+                    });
+            }
+
+
+            if (
+                Array.isArray(
+                    worksheet["!rows"]
+                )
+            ) {
+
+                worksheet["!rows"]
+                    .forEach(function (row, i) {
+
+                        if (!row) {
+                            return;
+                        }
+
+                        let height =
+                            row.hpx;
+
+                        if (
+                            !height &&
+                            row.hpt
+                        ) {
+
+                            height =
+                                Math.round(
+                                    row.hpt *
+                                    96 / 72
+                                );
+                        }
+
+
+                        if (height) {
+
+                            rowData[i] = {
+                                h: height
+                            };
+                        }
+
+                    });
+            }
+
+
+            if (
+                Array.isArray(
+                    worksheet["!merges"]
+                )
+            ) {
+
+                worksheet["!merges"]
+                    .forEach(function (merge) {
+
+                        mergeData.push({
+
+                            startRow:
+                                merge.s.r,
+
+                            endRow:
+                                merge.e.r,
+
+                            startColumn:
+                                merge.s.c,
+
+                            endColumn:
+                                merge.e.c
+
+                        });
+
+                    });
+            }
+
+
+            return {
+
+                id:
+                    "sheet_" + index,
+
+                name:
+                    name,
+
+                rowCount:
+                    rows,
+
+                columnCount:
+                    columns,
+
+                defaultColumnWidth:
+                    88,
+
+                defaultRowHeight:
+                    22,
+
+                cellData:
+                    cellData,
+
+                columnData:
+                    columnData,
+
+                rowData:
+                    rowData,
+
+                mergeData:
+                    mergeData,
+
+                showGridlines:
+                    1,
+
+                rowHeader: {
+                    width: 46
+                },
+
+                columnHeader: {
+                    height: 20
+                }
+
+            };
         }
 
-        if (
-            typeof structuredClone ===
-            "function"
-        ) {
 
-            return structuredClone(
-                cell
+        async function loadTemplate() {
+
+            const response =
+                await fetch(
+                    FILE,
+                    {
+                        cache: "no-store"
+                    }
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    "Cannot load " +
+                    FILE
+                );
+            }
+
+
+            const buffer =
+                await response.arrayBuffer();
+
+
+            const excel =
+                XLSX.read(
+                    buffer,
+                    {
+                        dense: true,
+                        cellFormula: true,
+                        cellStyles: true,
+                        cellNF: true
+                    }
+                );
+
+
+            const sheets = {};
+            const sheetOrder = [];
+
+
+            excel.SheetNames
+                .forEach(function (
+                    name,
+                    index
+                ) {
+
+                    const converted =
+                        convertSheet(
+                            excel.Sheets[name],
+                            name,
+                            index
+                        );
+
+                    sheets[
+                        converted.id
+                    ] = converted;
+
+                    sheetOrder.push(
+                        converted.id
+                    );
+
+                });
+
+
+            return {
+
+                id:
+                    "HILDA_" + pid,
+
+                name:
+                    "HILDA Spreadsheet",
+
+                locale:
+                    LocaleType.EN_US,
+
+                styles:
+                    {},
+
+                sheetOrder:
+                    sheetOrder,
+
+                sheets:
+                    sheets
+
+            };
+        }
+
+
+        function cloneCell(cell) {
+
+            if (
+                cell === null ||
+                cell === undefined
+            ) {
+                return null;
+            }
+
+
+            if (
+                typeof structuredClone ===
+                "function"
+            ) {
+
+                return structuredClone(
+                    cell
+                );
+            }
+
+
+            return JSON.parse(
+                JSON.stringify(
+                    cell
+                )
             );
         }
 
-        return JSON.parse(
-            JSON.stringify(
-                cell
-            )
-        );
-    }
+
+        function duplicateKey(value) {
+
+            if (
+                value === null ||
+                value === undefined
+            ) {
+
+                return "blank:";
+            }
 
 
-    function sameValue(a, b) {
+            if (
+                typeof value === "string"
+            ) {
 
-        return (
-            a === b ||
-            (
-                Number.isNaN(a) &&
-                Number.isNaN(b)
-            )
-        );
-    }
+                return (
+                    "string:" +
+                    value.toLowerCase()
+                );
+            }
 
 
-    function duplicateKey(value) {
-
-        if (
-            value === null ||
-            value === undefined
-        ) {
-
-            return "blank:";
+            return (
+                typeof value +
+                ":" +
+                String(value)
+            );
         }
 
-        if (
-            typeof value === "string"
-        ) {
 
-            return "string:" +
-                value.toLowerCase();
-        }
-
-        return (
-            typeof value +
-            ":" +
-            String(value)
-        );
-    }
-
-
-    /* =========================
-       Workbook
-       ========================= */
-
-    try {
+        /* =========================
+           LOAD WORKBOOK
+           ========================= */
 
         const snapshot =
             await loadTemplate();
@@ -912,14 +925,11 @@ body {
 
 
         /* =========================
-           Delta save
+           DELTA SAVE
            ========================= */
 
-        let saveTimer =
-            null;
-
-        let bulkEditing =
-            false;
+        let saveTimer = null;
+        let bulkEditing = false;
 
 
         function scheduleSave() {
@@ -965,14 +975,11 @@ body {
 
 
                         if (
-                            !deltas[
-                                sheetName
-                            ]
+                            !deltas[sheetName]
                         ) {
 
-                            deltas[
-                                sheetName
-                            ] = {};
+                            deltas[sheetName] =
+                                {};
                         }
 
 
@@ -1044,6 +1051,49 @@ body {
         }
 
 
+        function getLastRow(
+            sheet,
+            column
+        ) {
+
+            const dataInfo =
+                sheet
+                    .getDataRange()
+                    .getRange();
+
+
+            const values =
+                sheet
+                    .getRange(
+                        0,
+                        column,
+                        dataInfo.endRow + 1,
+                        1
+                    )
+                    .getRawValues();
+
+
+            let lastRow =
+                values.length - 1;
+
+
+            while (
+                lastRow > 0 &&
+                (
+                    values[lastRow][0] === null ||
+                    values[lastRow][0] === undefined ||
+                    values[lastRow][0] === ""
+                )
+            ) {
+
+                lastRow--;
+            }
+
+
+            return lastRow;
+        }
+
+
         /* =========================
            FILTER
            ========================= */
@@ -1056,6 +1106,7 @@ body {
 
         filterBtn.onmousedown =
             function (event) {
+
                 event.preventDefault();
             };
 
@@ -1089,45 +1140,11 @@ body {
                     }
 
 
-                    const dataRange =
-                        sheet.getDataRange();
-
-                    const dataInfo =
-                        dataRange.getRange();
-
-
-                    const columnValues =
-                        sheet
-                            .getRange(
-                                0,
-                                column,
-                                dataInfo.endRow + 1,
-                                1
-                            )
-                            .getRawValues();
-
-
-                    let lastRow =
-                        columnValues.length - 1;
-
-
-                    while (
-                        lastRow > 0 &&
-                        (
-                            columnValues[
-                                lastRow
-                            ][0] === null ||
-                            columnValues[
-                                lastRow
-                            ][0] === undefined ||
-                            columnValues[
-                                lastRow
-                            ][0] === ""
-                        )
-                    ) {
-
-                        lastRow--;
-                    }
+                    const lastRow =
+                        getLastRow(
+                            sheet,
+                            column
+                        );
 
 
                     if (
@@ -1142,11 +1159,6 @@ body {
                     }
 
 
-                    /*
-                     * Univer allows one filter
-                     * per worksheet.
-                     */
-
                     const existing =
                         sheet.getFilter();
 
@@ -1158,11 +1170,11 @@ body {
 
 
                     /*
-                     * Header = row 1.
-                     * Filter only selected column.
+                     * Row 1 is header.
+                     * Only selected column is filtered.
                      */
 
-                    const filterRange =
+                    const range =
                         sheet.getRange(
                             0,
                             column,
@@ -1172,7 +1184,7 @@ body {
 
 
                     const filter =
-                        filterRange.createFilter();
+                        range.createFilter();
 
 
                     if (!filter) {
@@ -1180,19 +1192,14 @@ body {
                         alert(
                             "Filter could not be created."
                         );
-
-                        return;
                     }
 
 
-                    /*
-                     * Header now gets the native
-                     * Univer filter dropdown.
-                     */
-
                 } catch (error) {
 
-                    console.error(error);
+                    console.error(
+                        error
+                    );
 
                     alert(
                         "Filter could not be applied."
@@ -1214,6 +1221,7 @@ body {
 
         duplicateBtn.onmousedown =
             function (event) {
+
                 event.preventDefault();
             };
 
@@ -1247,6 +1255,25 @@ body {
                     }
 
 
+                    const lastRow =
+                        getLastRow(
+                            sheet,
+                            column
+                        );
+
+
+                    if (
+                        lastRow < 2
+                    ) {
+
+                        alert(
+                            "Not enough data."
+                        );
+
+                        return;
+                    }
+
+
                     duplicateBtn.disabled =
                         true;
 
@@ -1259,65 +1286,16 @@ body {
                     );
 
 
-                    const dataInfo =
-                        sheet
-                            .getDataRange()
-                            .getRange();
-
-
                     const values =
                         sheet
                             .getRange(
-                                0,
+                                1,
                                 column,
-                                dataInfo.endRow + 1,
+                                lastRow,
                                 1
                             )
                             .getRawValues();
 
-
-                    /*
-                     * Trim empty cells at bottom.
-                     */
-
-                    let lastRow =
-                        values.length - 1;
-
-
-                    while (
-                        lastRow > 0 &&
-                        (
-                            values[
-                                lastRow
-                            ][0] === null ||
-                            values[
-                                lastRow
-                            ][0] === undefined ||
-                            values[
-                                lastRow
-                            ][0] === ""
-                        )
-                    ) {
-
-                        lastRow--;
-                    }
-
-
-                    if (
-                        lastRow < 2
-                    ) {
-
-                        alert(
-                            "Not enough data to remove duplicates."
-                        );
-
-                        return;
-                    }
-
-
-                    /*
-                     * Row 1 is header.
-                     */
 
                     const seen =
                         new Set();
@@ -1327,13 +1305,13 @@ body {
 
 
                     for (
-                        let r = 1;
-                        r <= lastRow;
-                        r++
+                        let i = 0;
+                        i < values.length;
+                        i++
                     ) {
 
                         const value =
-                            values[r][0];
+                            values[i][0];
 
                         const key =
                             duplicateKey(
@@ -1354,7 +1332,8 @@ body {
 
 
                         if (
-                            r % 5000 === 0
+                            i > 0 &&
+                            i % 5000 === 0
                         ) {
 
                             await new Promise(
@@ -1365,7 +1344,7 @@ body {
 
 
                     const removed =
-                        lastRow -
+                        values.length -
                         unique.length;
 
 
@@ -1381,27 +1360,27 @@ body {
                     }
 
 
-                    const oldValues =
-                        values
-                            .slice(
-                                1,
-                                lastRow + 1
-                            )
-                            .map(
-                                function (row) {
-                                    return row[0];
-                                }
-                            );
+                    const sheetName =
+                        sheet.getSheetName();
 
 
-                    /*
-                     * Remove duplicate values only
-                     * from selected column.
-                     */
+                    if (
+                        !deltas[sheetName]
+                    ) {
+
+                        deltas[sheetName] =
+                            {};
+                    }
+
 
                     bulkEditing =
                         true;
 
+
+                    /*
+                     * Keep header.
+                     * Clear only selected column data.
+                     */
 
                     sheet
                         .getRange(
@@ -1412,6 +1391,10 @@ body {
                         )
                         .clearContent();
 
+
+                    /*
+                     * Write unique values upward.
+                     */
 
                     sheet
                         .getRange(
@@ -1430,24 +1413,8 @@ body {
 
 
                     /*
-                     * Save only changed cells.
+                     * Save resulting column only.
                      */
-
-                    const sheetName =
-                        sheet.getSheetName();
-
-
-                    if (
-                        !deltas[
-                            sheetName
-                        ]
-                    ) {
-
-                        deltas[
-                            sheetName
-                        ] = {};
-                    }
-
 
                     for (
                         let i = 0;
@@ -1455,38 +1422,28 @@ body {
                         i++
                     ) {
 
-                        const newValue =
+                        const value =
                             i < unique.length
                                 ? unique[i][0]
                                 : null;
 
 
-                        if (
-                            !sameValue(
-                                oldValues[i],
-                                newValue
-                            )
-                        ) {
+                        deltas[
+                            sheetName
+                        ][
+                            (i + 1) +
+                            "," +
+                            column
+                        ] =
 
-                            const key =
-                                (i + 1) +
-                                "," +
-                                column;
+                            value === null ||
+                            value === undefined
 
+                                ? null
 
-                            deltas[
-                                sheetName
-                            ][
-                                key
-                            ] =
-                                newValue === null ||
-                                newValue === undefined
-                                    ? null
-                                    : {
-                                        v:
-                                            newValue
-                                    };
-                        }
+                                : {
+                                    v: value
+                                };
                     }
 
 
@@ -1512,7 +1469,9 @@ body {
                     bulkEditing =
                         false;
 
-                    console.error(error);
+                    console.error(
+                        error
+                    );
 
                     alert(
                         "Remove Duplicates failed."
@@ -1530,7 +1489,7 @@ body {
 
 
         /* =========================
-           Final lightweight save
+           FINAL SAVE
            ========================= */
 
         document.addEventListener(
@@ -1575,7 +1534,9 @@ body {
 
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            error
+        );
 
         document
             .getElementById(
