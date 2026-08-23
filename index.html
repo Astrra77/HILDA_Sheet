@@ -14,25 +14,12 @@
 <script src="https://unpkg.com/echarts@5.6.0/dist/echarts.min.js"></script>
 
 <script src="https://unpkg.com/@univerjs/presets@0.25.0/lib/umd/index.js"></script>
-
 <script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/index.js"></script>
 <script src="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/umd/locales/en-US.js"></script>
-
-<!-- Filter dependencies -->
-<script src="https://unpkg.com/@univerjs/sheets-filter@0.25.0/lib/umd/index.js"></script>
-<script src="https://unpkg.com/@univerjs/sheets-filter-ui@0.25.0/lib/umd/index.js"></script>
-
-<script src="https://unpkg.com/@univerjs/preset-sheets-filter@0.25.0/lib/umd/index.js"></script>
-<script src="https://unpkg.com/@univerjs/preset-sheets-filter@0.25.0/lib/umd/locales/en-US.js"></script>
 
 <link
     rel="stylesheet"
     href="https://unpkg.com/@univerjs/preset-sheets-core@0.25.0/lib/index.css"
->
-
-<link
-    rel="stylesheet"
-    href="https://unpkg.com/@univerjs/preset-sheets-filter@0.25.0/lib/index.css"
 >
 
 <style>
@@ -72,7 +59,6 @@ body {
 
 #tools button:disabled {
     opacity: 0.6;
-    cursor: default;
 }
 
 #app {
@@ -93,6 +79,47 @@ body {
     z-index: 9999;
 }
 
+
+/* Filter menu */
+
+#filterMenu {
+    position: fixed;
+    display: none;
+    width: 260px;
+    max-height: 420px;
+    background: white;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    box-shadow: 0 5px 20px rgba(0,0,0,.2);
+    padding: 10px;
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+    z-index: 20000;
+}
+
+#filterValues {
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    margin: 8px 0;
+    padding: 5px;
+}
+
+.filterValue {
+    display: block;
+    padding: 3px;
+}
+
+.filterActions {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.filterActions button {
+    padding: 5px 9px;
+}
+
 </style>
 </head>
 
@@ -104,10 +131,29 @@ body {
 </div>
 
 <div id="app"></div>
-<div id="status">Loading spreadsheet...</div>
+
+<div id="status">
+    Loading spreadsheet...
+</div>
+
+<div id="filterMenu">
+
+    <div>
+        <button id="selectAllFilter">Select All</button>
+        <button id="clearAllFilter">Clear</button>
+    </div>
+
+    <div id="filterValues"></div>
+
+    <div class="filterActions">
+        <button id="cancelFilter">Cancel</button>
+        <button id="applyFilter">OK</button>
+    </div>
+
+</div>
+
 
 <script>
-
 (async function () {
 
     const params =
@@ -120,16 +166,18 @@ body {
 
     if (!pid) {
 
-        document.getElementById("status").textContent =
+        document
+            .getElementById("status")
+            .textContent =
             "Missing participant ID.";
 
         return;
     }
 
 
-    /* =========================
-       CONFIG
-       ========================= */
+    /* =====================================
+       Configuration
+       ===================================== */
 
     const VERSION =
         "delta_v1";
@@ -144,9 +192,9 @@ body {
         "./HILDA_COVID_structured_v3.xlsx";
 
 
-    /* =========================
-       INDEXED DB
-       ========================= */
+    /* =====================================
+       IndexedDB
+       ===================================== */
 
     function openDB() {
 
@@ -191,7 +239,6 @@ body {
                         request.error
                     );
                 };
-
         });
     }
 
@@ -229,7 +276,6 @@ body {
 
                     resolve({});
                 };
-
         });
     }
 
@@ -257,7 +303,9 @@ body {
                 );
 
             transaction.oncomplete =
-                resolve;
+                function () {
+                    resolve();
+                };
 
             transaction.onerror =
                 function () {
@@ -266,574 +314,645 @@ body {
                         transaction.error
                     );
                 };
-
         });
     }
 
 
-    /* =========================
-       START UNIVER
-       ========================= */
+    /* =====================================
+       Start Univer
+       ===================================== */
 
-    try {
+    const {
+        createUniver
+    } = UniverPresets;
 
-        const {
-            createUniver
-        } = UniverPresets;
+    const {
+        LocaleType,
+        mergeLocales
+    } = UniverCore;
 
-        const {
-            LocaleType,
-            mergeLocales
-        } = UniverCore;
-
-        const {
-            UniverSheetsCorePreset
-        } = UniverPresetSheetsCore;
-
-        const {
-            UniverSheetsFilterPreset
-        } = UniverPresetSheetsFilter;
+    const {
+        UniverSheetsCorePreset
+    } = UniverPresetSheetsCore;
 
 
-        const {
-            univerAPI
-        } = createUniver({
+    const {
+        univerAPI
+    } = createUniver({
 
-            locale:
-                LocaleType.EN_US,
+        locale:
+            LocaleType.EN_US,
 
-            locales: {
+        locales: {
 
-                [LocaleType.EN_US]:
+            [LocaleType.EN_US]:
 
-                    mergeLocales(
-                        UniverPresetSheetsCoreEnUS,
-                        UniverPresetSheetsFilterEnUS
-                    )
-            },
+                mergeLocales(
+                    UniverPresetSheetsCoreEnUS
+                )
+        },
 
-            presets: [
+        presets: [
 
-                UniverSheetsCorePreset({
-                    container: "app"
-                }),
+            UniverSheetsCorePreset({
+                container: "app"
+            })
 
-                UniverSheetsFilterPreset()
-
-            ]
-
-        });
+        ]
+    });
 
 
-        /* =========================
-           EXCEL IMPORT
-           ========================= */
+    /* =====================================
+       Convert Excel cell
+       ===================================== */
 
-        function makeCell(
-            source,
-            sheetName
+    function makeCell(
+        source,
+        sheetName
+    ) {
+
+        if (!source) {
+            return null;
+        }
+
+        const cell = {};
+
+
+        /*
+         * Excel Commands:
+         * formulas remain text.
+         */
+
+        if (
+            sheetName === "Excel Commands" &&
+            source.f
         ) {
 
-            if (!source) {
-                return null;
-            }
-
-            const cell = {};
-
-
-            if (
-                sheetName === "Excel Commands" &&
-                source.f
-            ) {
-
-                cell.v =
-                    "=" + source.f;
-
-                return cell;
-            }
-
-
-            if (source.f) {
-
-                cell.f =
-                    source.f.startsWith("=")
-                        ? source.f
-                        : "=" + source.f;
-            }
-
-
-            if (
-                source.v !== undefined &&
-                source.v !== null
-            ) {
-
-                cell.v =
-                    source.v;
-            }
-
-
-            if (
-                source.z &&
-                source.z !== "General"
-            ) {
-
-                cell.s = {
-
-                    n: {
-                        pattern:
-                            source.z
-                    }
-
-                };
-            }
-
+            cell.v =
+                "=" + source.f;
 
             return cell;
         }
 
 
-        function convertSheet(
-            worksheet,
-            name,
-            index
+        if (source.f) {
+
+            cell.f =
+                source.f.startsWith("=")
+                    ? source.f
+                    : "=" + source.f;
+        }
+
+
+        if (
+            source.v !== undefined &&
+            source.v !== null
         ) {
 
-            const cellData = {};
-            const columnData = {};
-            const rowData = {};
-            const mergeData = [];
-
-            let rows = 1000;
-            let columns = 26;
+            cell.v =
+                source.v;
+        }
 
 
-            if (worksheet["!data"]) {
+        if (
+            source.z &&
+            source.z !== "General"
+        ) {
 
-                const data =
-                    worksheet["!data"];
+            cell.s = {
+
+                n: {
+                    pattern:
+                        source.z
+                }
+            };
+        }
+
+
+        return cell;
+    }
+
+
+    /* =====================================
+       Convert Excel worksheet
+       ===================================== */
+
+    function convertSheet(
+        worksheet,
+        name,
+        index
+    ) {
+
+        const cellData = {};
+        const columnData = {};
+        const rowData = {};
+        const mergeData = [];
+
+        let rows = 1000;
+        let columns = 26;
+
+
+        if (worksheet["!data"]) {
+
+            const data =
+                worksheet["!data"];
+
+            for (
+                let r = 0;
+                r < data.length;
+                r++
+            ) {
+
+                const row =
+                    data[r];
+
+                if (!row) {
+                    continue;
+                }
+
 
                 for (
-                    let r = 0;
-                    r < data.length;
-                    r++
+                    let c = 0;
+                    c < row.length;
+                    c++
                 ) {
 
-                    const row =
-                        data[r];
+                    const source =
+                        row[c];
 
-                    if (!row) {
+                    if (!source) {
                         continue;
                     }
 
 
-                    for (
-                        let c = 0;
-                        c < row.length;
-                        c++
-                    ) {
-
-                        const source =
-                            row[c];
-
-                        if (!source) {
-                            continue;
-                        }
-
-
-                        const cell =
-                            makeCell(
-                                source,
-                                name
-                            );
-
-                        if (!cell) {
-                            continue;
-                        }
-
-
-                        if (!cellData[r]) {
-                            cellData[r] = {};
-                        }
-
-                        cellData[r][c] =
-                            cell;
-
-
-                        rows =
-                            Math.max(
-                                rows,
-                                r + 1
-                            );
-
-                        columns =
-                            Math.max(
-                                columns,
-                                c + 1
-                            );
-                    }
-                }
-
-            } else {
-
-                Object.keys(
-                    worksheet
-                ).forEach(function (address) {
-
-                    if (
-                        address.charAt(0) === "!"
-                    ) {
-                        return;
-                    }
-
-
-                    const position =
-                        XLSX.utils.decode_cell(
-                            address
-                        );
-
                     const cell =
                         makeCell(
-                            worksheet[address],
+                            source,
                             name
                         );
 
                     if (!cell) {
-                        return;
+                        continue;
                     }
 
 
-                    if (!cellData[position.r]) {
-                        cellData[position.r] = {};
+                    if (!cellData[r]) {
+                        cellData[r] = {};
                     }
 
-                    cellData[
-                        position.r
-                    ][
-                        position.c
-                    ] = cell;
+
+                    cellData[r][c] =
+                        cell;
 
 
                     rows =
                         Math.max(
                             rows,
-                            position.r + 1
+                            r + 1
                         );
+
 
                     columns =
                         Math.max(
                             columns,
-                            position.c + 1
+                            c + 1
                         );
-
-                });
+                }
             }
 
+        } else {
 
-            if (
-                Array.isArray(
-                    worksheet["!cols"]
-                )
-            ) {
+            Object.keys(
+                worksheet
+            ).forEach(function (address) {
 
-                worksheet["!cols"]
-                    .forEach(function (column, i) {
-
-                        if (!column) {
-                            return;
-                        }
-
-                        let width =
-                            column.wpx;
-
-                        if (
-                            !width &&
-                            column.wch
-                        ) {
-
-                            width =
-                                Math.round(
-                                    column.wch * 7 + 5
-                                );
-                        }
-
-
-                        if (width) {
-
-                            columnData[i] = {
-                                w: width
-                            };
-                        }
-
-                    });
-            }
-
-
-            if (
-                Array.isArray(
-                    worksheet["!rows"]
-                )
-            ) {
-
-                worksheet["!rows"]
-                    .forEach(function (row, i) {
-
-                        if (!row) {
-                            return;
-                        }
-
-                        let height =
-                            row.hpx;
-
-                        if (
-                            !height &&
-                            row.hpt
-                        ) {
-
-                            height =
-                                Math.round(
-                                    row.hpt *
-                                    96 / 72
-                                );
-                        }
-
-
-                        if (height) {
-
-                            rowData[i] = {
-                                h: height
-                            };
-                        }
-
-                    });
-            }
-
-
-            if (
-                Array.isArray(
-                    worksheet["!merges"]
-                )
-            ) {
-
-                worksheet["!merges"]
-                    .forEach(function (merge) {
-
-                        mergeData.push({
-
-                            startRow:
-                                merge.s.r,
-
-                            endRow:
-                                merge.e.r,
-
-                            startColumn:
-                                merge.s.c,
-
-                            endColumn:
-                                merge.e.c
-
-                        });
-
-                    });
-            }
-
-
-            return {
-
-                id:
-                    "sheet_" + index,
-
-                name:
-                    name,
-
-                rowCount:
-                    rows,
-
-                columnCount:
-                    columns,
-
-                defaultColumnWidth:
-                    88,
-
-                defaultRowHeight:
-                    22,
-
-                cellData:
-                    cellData,
-
-                columnData:
-                    columnData,
-
-                rowData:
-                    rowData,
-
-                mergeData:
-                    mergeData,
-
-                showGridlines:
-                    1,
-
-                rowHeader: {
-                    width: 46
-                },
-
-                columnHeader: {
-                    height: 20
+                if (
+                    address.charAt(0) === "!"
+                ) {
+                    return;
                 }
 
-            };
-        }
+
+                const source =
+                    worksheet[address];
 
 
-        async function loadTemplate() {
-
-            const response =
-                await fetch(
-                    FILE,
-                    {
-                        cache: "no-store"
-                    }
-                );
-
-
-            if (!response.ok) {
-
-                throw new Error(
-                    "Cannot load " +
-                    FILE
-                );
-            }
-
-
-            const buffer =
-                await response.arrayBuffer();
-
-
-            const excel =
-                XLSX.read(
-                    buffer,
-                    {
-                        dense: true,
-                        cellFormula: true,
-                        cellStyles: true,
-                        cellNF: true
-                    }
-                );
-
-
-            const sheets = {};
-            const sheetOrder = [];
-
-
-            excel.SheetNames
-                .forEach(function (
-                    name,
-                    index
-                ) {
-
-                    const converted =
-                        convertSheet(
-                            excel.Sheets[name],
-                            name,
-                            index
-                        );
-
-                    sheets[
-                        converted.id
-                    ] = converted;
-
-                    sheetOrder.push(
-                        converted.id
+                const position =
+                    XLSX.utils.decode_cell(
+                        address
                     );
 
-                });
+
+                const cell =
+                    makeCell(
+                        source,
+                        name
+                    );
 
 
-            return {
+                if (!cell) {
+                    return;
+                }
 
-                id:
-                    "HILDA_" + pid,
 
-                name:
-                    "HILDA Spreadsheet",
+                if (
+                    !cellData[
+                        position.r
+                    ]
+                ) {
 
-                locale:
-                    LocaleType.EN_US,
+                    cellData[
+                        position.r
+                    ] = {};
+                }
 
-                styles:
-                    {},
 
-                sheetOrder:
-                    sheetOrder,
+                cellData[
+                    position.r
+                ][
+                    position.c
+                ] = cell;
 
-                sheets:
-                    sheets
 
-            };
+                rows =
+                    Math.max(
+                        rows,
+                        position.r + 1
+                    );
+
+
+                columns =
+                    Math.max(
+                        columns,
+                        position.c + 1
+                    );
+            });
         }
 
 
-        function cloneCell(cell) {
+        /*
+         * Column widths
+         */
 
-            if (
-                cell === null ||
-                cell === undefined
-            ) {
-                return null;
+        if (
+            Array.isArray(
+                worksheet["!cols"]
+            )
+        ) {
+
+            worksheet["!cols"]
+                .forEach(function (
+                    column,
+                    i
+                ) {
+
+                    if (!column) {
+                        return;
+                    }
+
+
+                    let width =
+                        column.wpx;
+
+
+                    if (
+                        !width &&
+                        column.wch
+                    ) {
+
+                        width =
+                            Math.round(
+                                column.wch * 7 + 5
+                            );
+                    }
+
+
+                    if (width) {
+
+                        columnData[i] = {
+                            w: width
+                        };
+                    }
+                });
+        }
+
+
+        /*
+         * Row heights
+         */
+
+        if (
+            Array.isArray(
+                worksheet["!rows"]
+            )
+        ) {
+
+            worksheet["!rows"]
+                .forEach(function (
+                    row,
+                    i
+                ) {
+
+                    if (!row) {
+                        return;
+                    }
+
+
+                    let height =
+                        row.hpx;
+
+
+                    if (
+                        !height &&
+                        row.hpt
+                    ) {
+
+                        height =
+                            Math.round(
+                                row.hpt *
+                                96 / 72
+                            );
+                    }
+
+
+                    if (height) {
+
+                        rowData[i] = {
+                            h: height
+                        };
+                    }
+                });
+        }
+
+
+        /*
+         * Merged cells
+         */
+
+        if (
+            Array.isArray(
+                worksheet["!merges"]
+            )
+        ) {
+
+            worksheet["!merges"]
+                .forEach(function (
+                    merge
+                ) {
+
+                    mergeData.push({
+
+                        startRow:
+                            merge.s.r,
+
+                        endRow:
+                            merge.e.r,
+
+                        startColumn:
+                            merge.s.c,
+
+                        endColumn:
+                            merge.e.c
+
+                    });
+                });
+        }
+
+
+        return {
+
+            id:
+                "sheet_" +
+                index,
+
+            name:
+                name,
+
+            rowCount:
+                rows,
+
+            columnCount:
+                columns,
+
+            defaultColumnWidth:
+                88,
+
+            defaultRowHeight:
+                22,
+
+            cellData:
+                cellData,
+
+            columnData:
+                columnData,
+
+            rowData:
+                rowData,
+
+            mergeData:
+                mergeData,
+
+            showGridlines:
+                1,
+
+            rowHeader: {
+                width: 46
+            },
+
+            columnHeader: {
+                height: 20
             }
+        };
+    }
 
 
-            if (
-                typeof structuredClone ===
-                "function"
-            ) {
+    /* =====================================
+       Load original XLSX
+       ===================================== */
 
-                return structuredClone(
-                    cell
-                );
-            }
+    async function loadTemplate() {
+
+        const response =
+            await fetch(
+                FILE,
+                {
+                    cache:
+                        "no-store"
+                }
+            );
 
 
-            return JSON.parse(
-                JSON.stringify(
-                    cell
-                )
+        if (!response.ok) {
+
+            throw new Error(
+                "Cannot load " +
+                FILE
             );
         }
 
 
-        function duplicateKey(value) {
+        const buffer =
+            await response.arrayBuffer();
 
-            if (
-                value === null ||
-                value === undefined
+
+        const excel =
+            XLSX.read(
+                buffer,
+                {
+                    dense:
+                        true,
+
+                    cellFormula:
+                        true,
+
+                    cellStyles:
+                        true,
+
+                    cellNF:
+                        true
+                }
+            );
+
+
+        const sheets = {};
+        const sheetOrder = [];
+
+
+        excel.SheetNames.forEach(
+            function (
+                name,
+                index
             ) {
 
-                return "blank:";
-            }
+                const converted =
+                    convertSheet(
+                        excel.Sheets[name],
+                        name,
+                        index
+                    );
 
 
-            if (
-                typeof value === "string"
-            ) {
+                sheets[
+                    converted.id
+                ] =
+                    converted;
 
-                return (
-                    "string:" +
-                    value.toLowerCase()
+
+                sheetOrder.push(
+                    converted.id
                 );
             }
+        );
 
+
+        return {
+
+            id:
+                "HILDA_" +
+                pid,
+
+            name:
+                "HILDA Spreadsheet",
+
+            locale:
+                LocaleType.EN_US,
+
+            styles:
+                {},
+
+            sheetOrder:
+                sheetOrder,
+
+            sheets:
+                sheets
+        };
+    }
+
+
+    /* =====================================
+       Helpers
+       ===================================== */
+
+    function cloneCell(cell) {
+
+        if (
+            cell === null ||
+            cell === undefined
+        ) {
+
+            return null;
+        }
+
+
+        if (
+            typeof structuredClone ===
+            "function"
+        ) {
+
+            return structuredClone(
+                cell
+            );
+        }
+
+
+        return JSON.parse(
+            JSON.stringify(
+                cell
+            )
+        );
+    }
+
+
+    function valueKey(value) {
+
+        if (
+            value === null ||
+            value === undefined ||
+            value === ""
+        ) {
+
+            return "__BLANK__";
+        }
+
+
+        if (
+            typeof value ===
+            "string"
+        ) {
 
             return (
-                typeof value +
-                ":" +
-                String(value)
+                "s:" +
+                value.toLowerCase()
             );
         }
 
 
-        /* =========================
-           LOAD WORKBOOK
-           ========================= */
+        return (
+            typeof value +
+            ":" +
+            String(value)
+        );
+    }
+
+
+    function nextFrame() {
+
+        return new Promise(
+            function (resolve) {
+
+                requestAnimationFrame(
+                    resolve
+                );
+            }
+        );
+    }
+
+
+    /* =====================================
+       Load workbook
+       ===================================== */
+
+    try {
 
         const snapshot =
             await loadTemplate();
@@ -849,71 +968,84 @@ body {
             await loadDeltas();
 
 
+        /*
+         * Restore participant edits.
+         */
+
         Object.keys(
             deltas
-        ).forEach(function (
-            sheetName
-        ) {
+        ).forEach(
+            function (sheetName) {
 
-            const worksheet =
-                workbook.getSheetByName(
-                    sheetName
-                );
-
-            if (!worksheet) {
-                return;
-            }
+                const worksheet =
+                    workbook.getSheetByName(
+                        sheetName
+                    );
 
 
-            Object.keys(
-                deltas[sheetName]
-            ).forEach(function (
-                position
-            ) {
+                if (!worksheet) {
+                    return;
+                }
 
-                const parts =
-                    position.split(",");
 
-                const row =
-                    Number(parts[0]);
-
-                const column =
-                    Number(parts[1]);
-
-                const cell =
+                const sheetDeltas =
                     deltas[
                         sheetName
-                    ][
-                        position
                     ];
 
 
-                if (cell === null) {
+                Object.keys(
+                    sheetDeltas
+                ).forEach(
+                    function (position) {
 
-                    worksheet
-                        .getRange(
-                            row,
-                            column
-                        )
-                        .setValue(
-                            null
-                        );
+                        const parts =
+                            position.split(",");
 
-                } else {
 
-                    worksheet
-                        .getRange(
-                            row,
-                            column
-                        )
-                        .setValue(
-                            cell
-                        );
-                }
+                        const row =
+                            Number(
+                                parts[0]
+                            );
 
-            });
 
-        });
+                        const column =
+                            Number(
+                                parts[1]
+                            );
+
+
+                        const cell =
+                            sheetDeltas[
+                                position
+                            ];
+
+
+                        const range =
+                            worksheet.getRange(
+                                row,
+                                column
+                            );
+
+
+                        if (
+                            cell === null
+                        ) {
+
+                            range.setValue(
+                                null
+                            );
+
+                        } else {
+
+                            range.setValue(
+                                cell
+                            );
+                        }
+                    }
+                );
+            }
+        );
 
 
         document
@@ -924,19 +1056,23 @@ body {
                 "none";
 
 
-        /* =========================
-           DELTA SAVE
-           ========================= */
+        /* =================================
+           DELTA AUTOSAVE
+           ================================= */
 
-        let saveTimer = null;
-        let bulkEditing = false;
+        let saveTimer =
+            null;
+
+        let bulkEditing =
+            false;
 
 
-        function scheduleSave() {
+        function scheduleDeltaSave() {
 
             clearTimeout(
                 saveTimer
             );
+
 
             saveTimer =
                 setTimeout(
@@ -956,78 +1092,117 @@ body {
 
         workbook
             .getSheets()
-            .forEach(function (
-                worksheet
-            ) {
+            .forEach(
+                function (
+                    worksheet
+                ) {
 
-                const sheetName =
-                    worksheet.getSheetName();
-
-
-                worksheet.onCellDataChange(
-                    function (
-                        changedCells
-                    ) {
-
-                        if (bulkEditing) {
-                            return;
-                        }
+                    const sheetName =
+                        worksheet
+                            .getSheetName();
 
 
-                        if (
-                            !deltas[sheetName]
-                        ) {
+                    worksheet
+                        .onCellDataChange(
+                            function (
+                                changedCells
+                            ) {
 
-                            deltas[sheetName] =
-                                {};
-                        }
+                                if (
+                                    bulkEditing
+                                ) {
+                                    return;
+                                }
 
 
-                        const matrix =
-                            changedCells.getMatrix();
+                                if (
+                                    !deltas[
+                                        sheetName
+                                    ]
+                                ) {
+
+                                    deltas[
+                                        sheetName
+                                    ] = {};
+                                }
 
 
-                        Object.keys(
-                            matrix
-                        ).forEach(function (r) {
+                                const matrix =
+                                    changedCells
+                                        .getMatrix();
 
-                            if (!matrix[r]) {
-                                return;
+
+                                Object.keys(
+                                    matrix
+                                ).forEach(
+                                    function (
+                                        rowKey
+                                    ) {
+
+                                        const row =
+                                            matrix[
+                                                rowKey
+                                            ];
+
+
+                                        if (!row) {
+                                            return;
+                                        }
+
+
+                                        Object.keys(
+                                            row
+                                        ).forEach(
+                                            function (
+                                                columnKey
+                                            ) {
+
+                                                deltas[
+                                                    sheetName
+                                                ][
+                                                    rowKey +
+                                                    "," +
+                                                    columnKey
+                                                ] =
+                                                    cloneCell(
+                                                        row[
+                                                            columnKey
+                                                        ]
+                                                    );
+                                            }
+                                        );
+                                    }
+                                );
+
+
+                                scheduleDeltaSave();
                             }
+                        );
+                }
+            );
 
 
-                            Object.keys(
-                                matrix[r]
-                            ).forEach(function (c) {
-
-                                deltas[
-                                    sheetName
-                                ][
-                                    r + "," + c
-                                ] =
-                                    cloneCell(
-                                        matrix[r][c]
-                                    );
-
-                            });
-
-                        });
-
-
-                        scheduleSave();
-
-                    }
-                );
-
-            });
-
+        /* =================================
+           Selected column
+           ================================= */
 
         function getSelectedColumn(
             sheet
         ) {
 
+            const selection =
+                sheet.getSelection();
+
+
+            if (!selection) {
+                return null;
+            }
+
+
             const range =
-                sheet.getActiveRange();
+                selection
+                    .getActiveRange();
+
 
             if (!range) {
                 return null;
@@ -1051,38 +1226,53 @@ body {
         }
 
 
-        function getLastRow(
+        function getColumnData(
             sheet,
             column
         ) {
 
-            const dataInfo =
-                sheet
-                    .getDataRange()
-                    .getRange();
+            const dataRange =
+                sheet.getDataRange();
 
 
-            const values =
+            const endRow =
+                dataRange
+                    .getRange()
+                    .endRow;
+
+
+            const raw =
                 sheet
                     .getRange(
                         0,
                         column,
-                        dataInfo.endRow + 1,
+                        endRow + 1,
                         1
                     )
                     .getRawValues();
 
 
+            const display =
+                sheet
+                    .getRange(
+                        0,
+                        column,
+                        endRow + 1,
+                        1
+                    )
+                    .getDisplayValues();
+
+
             let lastRow =
-                values.length - 1;
+                raw.length - 1;
 
 
             while (
                 lastRow > 0 &&
                 (
-                    values[lastRow][0] === null ||
-                    values[lastRow][0] === undefined ||
-                    values[lastRow][0] === ""
+                    raw[lastRow][0] === null ||
+                    raw[lastRow][0] === undefined ||
+                    raw[lastRow][0] === ""
                 )
             ) {
 
@@ -1090,13 +1280,156 @@ body {
             }
 
 
-            return lastRow;
+            return {
+                raw:
+                    raw,
+                display:
+                    display,
+                lastRow:
+                    lastRow
+            };
         }
 
 
-        /* =========================
+        /* =================================
            FILTER
-           ========================= */
+           ================================= */
+
+        let filterState =
+            null;
+
+
+        async function clearFilter() {
+
+            if (!filterState) {
+                return;
+            }
+
+
+            const sheet =
+                workbook.getSheetByName(
+                    filterState.sheetName
+                );
+
+
+            if (sheet) {
+
+                for (
+                    let i = 0;
+                    i <
+                    filterState.hiddenRuns.length;
+                    i++
+                ) {
+
+                    const run =
+                        filterState
+                            .hiddenRuns[i];
+
+
+                    sheet.showRows(
+                        run.start,
+                        run.count
+                    );
+                }
+
+
+                sheet.refreshCanvas();
+            }
+
+
+            filterState =
+                null;
+
+
+            document
+                .getElementById(
+                    "filterMenu"
+                )
+                .style.display =
+                    "none";
+        }
+
+
+        /*
+         * Draw ▼ inside row 1 of the
+         * filtered column.
+         */
+
+        univerAPI
+            .getSheetHooks()
+            .onCellRender([
+                {
+
+                    drawWith:
+                        function (
+                            ctx,
+                            info
+                        ) {
+
+                            if (
+                                !filterState ||
+                                info.row !== 0 ||
+                                info.col !==
+                                    filterState.column
+                            ) {
+
+                                return;
+                            }
+
+
+                            const activeSheet =
+                                univerAPI
+                                    .getActiveWorkbook()
+                                    .getActiveSheet();
+
+
+                            if (
+                                !activeSheet ||
+                                activeSheet
+                                    .getSheetName() !==
+                                    filterState.sheetName
+                            ) {
+
+                                return;
+                            }
+
+
+                            const p =
+                                info.primaryWithCoord;
+
+
+                            if (!p) {
+                                return;
+                            }
+
+
+                            const right =
+                                p.endX !== undefined
+                                    ?
+                                    p.endX
+                                    :
+                                    p.startX + 70;
+
+
+                            ctx.save();
+
+                            ctx.font =
+                                "12px Arial";
+
+                            ctx.fillStyle =
+                                "#444";
+
+                            ctx.fillText(
+                                "▼",
+                                right - 14,
+                                p.startY + 15
+                            );
+
+                            ctx.restore();
+                        }
+                }
+            ]);
+
 
         const filterBtn =
             document.getElementById(
@@ -1112,106 +1445,537 @@ body {
 
 
         filterBtn.onclick =
-            function () {
+            async function () {
 
-                try {
+                const sheet =
+                    univerAPI
+                        .getActiveWorkbook()
+                        .getActiveSheet();
+
+
+                const column =
+                    getSelectedColumn(
+                        sheet
+                    );
+
+
+                if (
+                    column === null
+                ) {
+
+                    alert(
+                        "Select one column first."
+                    );
+
+                    return;
+                }
+
+
+                /*
+                 * Clicking Filter again
+                 * on same column removes it.
+                 */
+
+                if (
+                    filterState &&
+                    filterState.sheetName ===
+                        sheet.getSheetName() &&
+                    filterState.column ===
+                        column
+                ) {
+
+                    await clearFilter();
+
+                    return;
+                }
+
+
+                await clearFilter();
+
+
+                filterState = {
+
+                    sheetName:
+                        sheet.getSheetName(),
+
+                    column:
+                        column,
+
+                    hiddenRuns:
+                        [],
+
+                    selectedKeys:
+                        null
+                };
+
+
+                sheet.refreshCanvas();
+            };
+
+
+        /* =================================
+           Click ▼ / row 1
+           ================================= */
+
+        univerAPI.addEvent(
+            univerAPI.Event.CellClicked,
+            function (params) {
+
+                if (!filterState) {
+                    return;
+                }
+
+
+                if (
+                    params.row !== 0 ||
+                    params.column !==
+                        filterState.column
+                ) {
+
+                    return;
+                }
+
+
+                if (
+                    params.worksheet
+                        .getSheetName() !==
+                    filterState.sheetName
+                ) {
+
+                    return;
+                }
+
+
+                openFilterMenu(
+                    params.worksheet,
+                    filterState.column
+                );
+            }
+        );
+
+
+        /* =================================
+           Filter menu
+           ================================= */
+
+        function openFilterMenu(
+            sheet,
+            column
+        ) {
+
+            const data =
+                getColumnData(
+                    sheet,
+                    column
+                );
+
+
+            const options =
+                new Map();
+
+
+            for (
+                let r = 1;
+                r <= data.lastRow;
+                r++
+            ) {
+
+                const raw =
+                    data.raw[r][0];
+
+
+                const key =
+                    valueKey(
+                        raw
+                    );
+
+
+                if (
+                    !options.has(
+                        key
+                    )
+                ) {
+
+                    let label =
+                        data.display[r][0];
+
+
+                    if (
+                        label === null ||
+                        label === undefined ||
+                        label === ""
+                    ) {
+
+                        label =
+                            "(Blanks)";
+                    }
+
+
+                    options.set(
+                        key,
+                        label
+                    );
+                }
+            }
+
+
+            /*
+             * Prevent a huge DOM menu
+             * on ID variables.
+             */
+
+            if (
+                options.size > 2000
+            ) {
+
+                alert(
+                    "This column has too many unique values for the quick filter."
+                );
+
+                return;
+            }
+
+
+            const menu =
+                document.getElementById(
+                    "filterMenu"
+                );
+
+
+            const valuesBox =
+                document.getElementById(
+                    "filterValues"
+                );
+
+
+            valuesBox.innerHTML =
+                "";
+
+
+            const selected =
+                filterState
+                    .selectedKeys;
+
+
+            options.forEach(
+                function (
+                    label,
+                    key
+                ) {
+
+                    const row =
+                        document.createElement(
+                            "label"
+                        );
+
+
+                    row.className =
+                        "filterValue";
+
+
+                    const checkbox =
+                        document.createElement(
+                            "input"
+                        );
+
+
+                    checkbox.type =
+                        "checkbox";
+
+
+                    checkbox.value =
+                        key;
+
+
+                    checkbox.checked =
+                        !selected ||
+                        selected.has(
+                            key
+                        );
+
+
+                    row.appendChild(
+                        checkbox
+                    );
+
+
+                    row.appendChild(
+                        document.createTextNode(
+                            " " + label
+                        )
+                    );
+
+
+                    valuesBox.appendChild(
+                        row
+                    );
+                }
+            );
+
+
+            menu.style.left =
+                "50%";
+
+            menu.style.top =
+                "120px";
+
+            menu.style.transform =
+                "translateX(-50%)";
+
+            menu.style.display =
+                "block";
+        }
+
+
+        document
+            .getElementById(
+                "selectAllFilter"
+            )
+            .onclick =
+                function () {
+
+                    document
+                        .querySelectorAll(
+                            "#filterValues input"
+                        )
+                        .forEach(
+                            function (box) {
+
+                                box.checked =
+                                    true;
+                            }
+                        );
+                };
+
+
+        document
+            .getElementById(
+                "clearAllFilter"
+            )
+            .onclick =
+                function () {
+
+                    document
+                        .querySelectorAll(
+                            "#filterValues input"
+                        )
+                        .forEach(
+                            function (box) {
+
+                                box.checked =
+                                    false;
+                            }
+                        );
+                };
+
+
+        document
+            .getElementById(
+                "cancelFilter"
+            )
+            .onclick =
+                function () {
+
+                    document
+                        .getElementById(
+                            "filterMenu"
+                        )
+                        .style.display =
+                            "none";
+                };
+
+
+        document
+            .getElementById(
+                "applyFilter"
+            )
+            .onclick =
+                async function () {
+
+                    if (!filterState) {
+                        return;
+                    }
+
 
                     const sheet =
-                        univerAPI
-                            .getActiveWorkbook()
-                            .getActiveSheet();
-
-
-                    const column =
-                        getSelectedColumn(
-                            sheet
+                        workbook.getSheetByName(
+                            filterState.sheetName
                         );
 
 
-                    if (
-                        column === null
+                    const selected =
+                        new Set(
+                            Array.from(
+                                document
+                                    .querySelectorAll(
+                                        "#filterValues input:checked"
+                                    )
+                            )
+                            .map(
+                                function (box) {
+
+                                    return box.value;
+                                }
+                            )
+                        );
+
+
+                    /*
+                     * Restore previous hidden rows.
+                     */
+
+                    for (
+                        let i = 0;
+                        i <
+                        filterState.hiddenRuns.length;
+                        i++
                     ) {
 
-                        alert(
-                            "Select one column first."
-                        );
+                        const run =
+                            filterState
+                                .hiddenRuns[i];
 
-                        return;
+
+                        sheet.showRows(
+                            run.start,
+                            run.count
+                        );
                     }
 
 
-                    const lastRow =
-                        getLastRow(
+                    const data =
+                        getColumnData(
                             sheet,
-                            column
+                            filterState.column
                         );
 
 
-                    if (
-                        lastRow < 1
+                    const runs =
+                        [];
+
+
+                    let runStart =
+                        null;
+
+
+                    for (
+                        let r = 1;
+                        r <= data.lastRow;
+                        r++
                     ) {
 
-                        alert(
-                            "This column has no data."
-                        );
+                        const keep =
+                            selected.has(
+                                valueKey(
+                                    data.raw[r][0]
+                                )
+                            );
 
-                        return;
+
+                        if (!keep) {
+
+                            if (
+                                runStart ===
+                                null
+                            ) {
+
+                                runStart =
+                                    r;
+                            }
+
+                        } else if (
+                            runStart !==
+                            null
+                        ) {
+
+                            runs.push({
+
+                                start:
+                                    runStart,
+
+                                count:
+                                    r -
+                                    runStart
+                            });
+
+
+                            runStart =
+                                null;
+                        }
                     }
 
 
-                    const existing =
-                        sheet.getFilter();
+                    if (
+                        runStart !==
+                        null
+                    ) {
 
+                        runs.push({
 
-                    if (existing) {
+                            start:
+                                runStart,
 
-                        existing.remove();
+                            count:
+                                data.lastRow -
+                                runStart +
+                                1
+                        });
                     }
 
 
                     /*
-                     * Row 1 is header.
-                     * Only selected column is filtered.
+                     * Hide contiguous blocks,
+                     * not one row at a time.
                      */
 
-                    const range =
-                        sheet.getRange(
-                            0,
-                            column,
-                            lastRow + 1,
-                            1
+                    for (
+                        let i = 0;
+                        i < runs.length;
+                        i++
+                    ) {
+
+                        sheet.hideRows(
+                            runs[i].start,
+                            runs[i].count
                         );
 
 
-                    const filter =
-                        range.createFilter();
+                        if (
+                            i > 0 &&
+                            i % 100 === 0
+                        ) {
 
-
-                    if (!filter) {
-
-                        alert(
-                            "Filter could not be created."
-                        );
+                            await nextFrame();
+                        }
                     }
 
 
-                } catch (error) {
-
-                    console.error(
-                        error
-                    );
-
-                    alert(
-                        "Filter could not be applied."
-                    );
-                }
-            };
+                    filterState
+                        .hiddenRuns =
+                            runs;
 
 
-        /* =========================
+                    filterState
+                        .selectedKeys =
+                            selected;
+
+
+                    document
+                        .getElementById(
+                            "filterMenu"
+                        )
+                        .style.display =
+                            "none";
+
+
+                    sheet.refreshCanvas();
+                };
+
+
+        /* =================================
            REMOVE DUPLICATES
-           Selected column only
-           ========================= */
+           Current column only
+           ================================= */
 
         const duplicateBtn =
             document.getElementById(
@@ -1229,104 +1993,131 @@ body {
         duplicateBtn.onclick =
             async function () {
 
-                try {
-
-                    const sheet =
-                        univerAPI
-                            .getActiveWorkbook()
-                            .getActiveSheet();
+                const sheet =
+                    univerAPI
+                        .getActiveWorkbook()
+                        .getActiveSheet();
 
 
-                    const column =
-                        getSelectedColumn(
-                            sheet
-                        );
-
-
-                    if (
-                        column === null
-                    ) {
-
-                        alert(
-                            "Select one column first."
-                        );
-
-                        return;
-                    }
-
-
-                    const lastRow =
-                        getLastRow(
-                            sheet,
-                            column
-                        );
-
-
-                    if (
-                        lastRow < 2
-                    ) {
-
-                        alert(
-                            "Not enough data."
-                        );
-
-                        return;
-                    }
-
-
-                    duplicateBtn.disabled =
-                        true;
-
-                    duplicateBtn.textContent =
-                        "Working...";
-
-
-                    await new Promise(
-                        requestAnimationFrame
+                const column =
+                    getSelectedColumn(
+                        sheet
                     );
 
 
-                    const values =
-                        sheet
-                            .getRange(
-                                1,
-                                column,
-                                lastRow,
-                                1
-                            )
-                            .getRawValues();
+                if (
+                    column === null
+                ) {
+
+                    alert(
+                        "Select one column first."
+                    );
+
+                    return;
+                }
+
+
+                /*
+                 * Remove active filtering
+                 * before modifying values.
+                 */
+
+                if (filterState) {
+
+                    await clearFilter();
+                }
+
+
+                const data =
+                    getColumnData(
+                        sheet,
+                        column
+                    );
+
+
+                if (
+                    data.lastRow < 2
+                ) {
+
+                    alert(
+                        "Not enough data."
+                    );
+
+                    return;
+                }
+
+
+                duplicateBtn.disabled =
+                    true;
+
+
+                duplicateBtn.textContent =
+                    "Working...";
+
+
+                await nextFrame();
+
+
+                try {
+
+                    const range =
+                        sheet.getRange(
+                            1,
+                            column,
+                            data.lastRow,
+                            1
+                        );
+
+
+                    const raw =
+                        range.getRawValues();
+
+
+                    const cells =
+                        range.getCellDatas();
 
 
                     const seen =
                         new Set();
 
-                    const unique =
+
+                    const uniqueCells =
                         [];
 
 
                     for (
                         let i = 0;
-                        i < values.length;
+                        i < raw.length;
                         i++
                     ) {
 
-                        const value =
-                            values[i][0];
-
                         const key =
-                            duplicateKey(
-                                value
+                            valueKey(
+                                raw[i][0]
                             );
 
 
                         if (
-                            !seen.has(key)
+                            !seen.has(
+                                key
+                            )
                         ) {
 
-                            seen.add(key);
+                            seen.add(
+                                key
+                            );
 
-                            unique.push([
-                                value
+
+                            uniqueCells.push([
+
+                                cloneCell(
+                                    cells[i]
+                                        ?
+                                        cells[i][0]
+                                        :
+                                        null
+                                )
+
                             ]);
                         }
 
@@ -1336,16 +2127,14 @@ body {
                             i % 5000 === 0
                         ) {
 
-                            await new Promise(
-                                requestAnimationFrame
-                            );
+                            await nextFrame();
                         }
                     }
 
 
                     const removed =
-                        values.length -
-                        unique.length;
+                        raw.length -
+                        uniqueCells.length;
 
 
                     if (
@@ -1360,72 +2149,71 @@ body {
                     }
 
 
-                    const sheetName =
-                        sheet.getSheetName();
-
-
-                    if (
-                        !deltas[sheetName]
-                    ) {
-
-                        deltas[sheetName] =
-                            {};
-                    }
-
+                    /*
+                     * One bulk clear +
+                     * one bulk write.
+                     */
 
                     bulkEditing =
                         true;
 
 
-                    /*
-                     * Keep header.
-                     * Clear only selected column data.
-                     */
+                    try {
 
-                    sheet
-                        .getRange(
+                        range.clearContent();
+
+
+                        sheet.getRange(
                             1,
                             column,
-                            lastRow,
-                            1
-                        )
-                        .clearContent();
-
-
-                    /*
-                     * Write unique values upward.
-                     */
-
-                    sheet
-                        .getRange(
-                            1,
-                            column,
-                            unique.length,
+                            uniqueCells.length,
                             1
                         )
                         .setValues(
-                            unique
+                            uniqueCells
                         );
 
+                    } finally {
 
-                    bulkEditing =
-                        false;
+                        bulkEditing =
+                            false;
+                    }
 
 
                     /*
-                     * Save resulting column only.
+                     * Save only this column
+                     * into existing delta model.
                      */
+
+                    const sheetName =
+                        sheet.getSheetName();
+
+
+                    if (
+                        !deltas[
+                            sheetName
+                        ]
+                    ) {
+
+                        deltas[
+                            sheetName
+                        ] = {};
+                    }
+
 
                     for (
                         let i = 0;
-                        i < lastRow;
+                        i < data.lastRow;
                         i++
                     ) {
 
-                        const value =
-                            i < unique.length
-                                ? unique[i][0]
-                                : null;
+                        const cell =
+                            i <
+                            uniqueCells.length
+                                ?
+                                uniqueCells[i][0]
+                                :
+                                null;
 
 
                         deltas[
@@ -1435,15 +2223,18 @@ body {
                             "," +
                             column
                         ] =
+                            cloneCell(
+                                cell
+                            );
 
-                            value === null ||
-                            value === undefined
 
-                                ? null
+                        if (
+                            i > 0 &&
+                            i % 10000 === 0
+                        ) {
 
-                                : {
-                                    v: value
-                                };
+                            await nextFrame();
+                        }
                     }
 
 
@@ -1466,12 +2257,10 @@ body {
 
                 } catch (error) {
 
-                    bulkEditing =
-                        false;
-
                     console.error(
                         error
                     );
+
 
                     alert(
                         "Remove Duplicates failed."
@@ -1479,8 +2268,13 @@ body {
 
                 } finally {
 
+                    bulkEditing =
+                        false;
+
+
                     duplicateBtn.disabled =
                         false;
+
 
                     duplicateBtn.textContent =
                         "Remove Duplicates";
@@ -1488,9 +2282,9 @@ body {
             };
 
 
-        /* =========================
-           FINAL SAVE
-           ========================= */
+        /* =================================
+           Final lightweight save
+           ================================= */
 
         document.addEventListener(
             "visibilitychange",
@@ -1504,6 +2298,7 @@ body {
                     clearTimeout(
                         saveTimer
                     );
+
 
                     saveDeltas(
                         deltas
@@ -1523,6 +2318,7 @@ body {
                     saveTimer
                 );
 
+
                 saveDeltas(
                     deltas
                 ).catch(
@@ -1538,6 +2334,7 @@ body {
             error
         );
 
+
         document
             .getElementById(
                 "status"
@@ -1549,7 +2346,6 @@ body {
     }
 
 })();
-
 </script>
 
 </body>
